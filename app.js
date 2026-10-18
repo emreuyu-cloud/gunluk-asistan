@@ -310,10 +310,9 @@
     document.addEventListener('click', onClick);
     $('#sheet-backdrop').onclick = closeSheet;
     renderAll();
-    const root = $('#screen-ceviri');
-    if (typeof window.initCeviri === 'function') { try { window.initCeviri(root); } catch (e) { console.error(e); } }
-    else root.innerHTML = '<h1 class="large-title">Çeviri</h1><div class="empty">Çeviri ekranı yükleniyor...</div>';
-    show(store.get('lastTab', 'bugun'));
+    try { Object.keys(localStorage).forEach(k => { if (k.indexOf('ceviri.') === 0) localStorage.removeItem(k); }); } catch (e) {}
+    const last = store.get('lastTab', 'bugun');
+    show(document.getElementById('screen-' + last) ? last : 'bugun');
     setInterval(() => {
       if (active) {
         const t = $('#ringtime'); if (t) t.textContent = mmss(Date.now() - active);

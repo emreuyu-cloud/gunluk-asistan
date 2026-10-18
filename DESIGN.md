@@ -38,3 +38,7 @@ Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
 - Boşluk: ekran kenarı 16px, gruplar arası 24px.
 - Animasyon: ekran değişiminde 200ms fade; düğmede `:active` ile scale(.97).
 - Güvenli alanlar: `env(safe-area-inset-*)` iskelette hallediliyor.
+
+## Güncelleme (18 Ekim 2026)
+- Çeviri özelliği kullanıcının isteğiyle tamamen kaldırıldı (translate.js silindi, sekme ve ceviri.* verileri temizlendi).
+- Alt sekme çubuğu iPhone güvenli alanına göre aşağı alındı (--tb-pad).
