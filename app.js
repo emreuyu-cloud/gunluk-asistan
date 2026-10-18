@@ -44,9 +44,15 @@
   function closeSheet() { $('#sheet').classList.remove('on'); $('#sheet-backdrop').classList.remove('on'); }
 
   // ---------- veri ----------
-  const DEF = { times: { Sabah: ['08:00', '16:00'], Akşam: ['16:00', '00:00'], Gece: ['00:00', '08:00'] }, breakMin: 60, rotation: { seq: ['Sabah','Sabah','Akşam','Akşam','Gece','Gece','İzin','İzin'], start: '2026-09-01' } };
+  const DEF = { times: { Sabah: ['06:30', '14:30'], Akşam: ['14:30', '22:30'], Gece: ['22:30', '06:30'] }, breakMin: 60, rotation: { seq: ['Sabah','Sabah','Akşam','Akşam','Gece','Gece','İzin','İzin'], start: '2026-09-01' } };
   let S = Object.assign({}, DEF, store.get('settings', {}));
   S.times = Object.assign({}, DEF.times, S.times || {});
+  if (!S.v || S.v < 2) {
+    const OLD = { Sabah: ['08:00', '16:00'], Akşam: ['16:00', '00:00'], Gece: ['00:00', '08:00'] };
+    for (const k in OLD) if (S.times[k] && S.times[k][0] === OLD[k][0] && S.times[k][1] === OLD[k][1]) S.times[k] = DEF.times[k].slice();
+    if (!S.rotation) S.rotation = DEF.rotation;
+    S.v = 2; store.set('settings', S);
+  }
   let overrides = store.get('overrides', {});
   let breaks = store.get('breaks', []);
   let active = store.get('activeBreak', null);
