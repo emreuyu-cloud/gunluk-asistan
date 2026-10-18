@@ -42,3 +42,14 @@ Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
 ## Güncelleme (18 Ekim 2026)
 - Çeviri özelliği kullanıcının isteğiyle tamamen kaldırıldı (translate.js silindi, sekme ve ceviri.* verileri temizlendi).
 - Alt sekme çubuğu iPhone güvenli alanına göre aşağı alındı (--tb-pad).
+
+## Sürüm 4.0 (18 Ekim 2026)
+- Gece vardiyası molaları artık vardiyanın başladığı güne sayılıyor; gece yarısı "Kalan mola" sıfırlanmıyor.
+- Güvenilir güncelleme: servis çalışanı v7, ağdan önbelleksiz çekiyor, 3 sn içinde yanıt yoksa önbellekten açıyor; yeni sürümde "Yeni sürüm yüklendi" deyip yenileniyor.
+- Yedek: paylaş menüsüyle yedek alma (ga-backup biçimi), "Yedeği geri yükle", "Son yedek: X gün önce".
+- Sağlamlık: kayıt hatasında uyarı, bozuk ayar saatlerine varsayılan, kalıcı depolama isteği, 365 günlük mola geçmişi, aynı başlangıç/bitiş saatine izin yok.
+- Mola: çift dokunma koruması, 5 sn'den kısa mola kaydedilmiyor, unutulan mola uyarısı, "+ Mola ekle", molaya dokunup düzenleme/silme, 5 sn "Geri al", onay kutuları yerine iOS alt sayfası.
+- Bugün: "Sonraki vardiya" (Ayarlar'daki yol süresine göre "…'te çık") ve "Sonraki izin" kartları.
+- Ayarlar: "Yol süresi", "Takvime aktar (.ics)" (60 gün, her vardiyadan 1 saat önce hatırlatma), gizli "Tetris modu" (Nayro'nun yüzü logolu; tetris.js ilk açılışta yüklenir).
+- Erişilebilirlik: süs SVG'lerinde aria-hidden, sekmelerde aria-label/aria-current, pasif ekranlar inert, ay düğmesi etiketleri, toast aria-live, sayfayı aşağı sürükleyerek kapatma, azaltılmış hareket desteği.
+- Manifest açıklamasından çeviri ifadesi kaldırıldı.

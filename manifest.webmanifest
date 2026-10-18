@@ -1,7 +1,7 @@
 {
   "name": "Günlük Asistan",
   "short_name": "Asistan",
-  "description": "Vardiya takvimi, mola sayacı ve İngilizce çeviri bir arada.",
+  "description": "Vardiya takvimi, mola sayacı ve sonraki izin bir arada.",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",
