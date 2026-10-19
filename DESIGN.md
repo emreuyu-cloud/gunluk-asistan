@@ -7,20 +7,11 @@ Hedef: iPhone'da ana ekrana eklenen, tam ekran açılan, internetsiz çalışan 
 |---|---|
 | index.html, styles.css, app.js (iskelet, Vardiya, Mola, Ayarlar) | Nayro |
 | manifest.webmanifest, sw.js (çevrimdışı önbellek) | Nayro |
-| translate.js (Çeviri ekranı) | nayronayt |
+| account.js, firebase-config.js (hesap, tembel yüklenir) | — |
 | icons/icon-180.png, icon-192.png, icon-512.png, icon-maskable-512.png | nayronayt |
 | Son test raporu: TEST.md | nayronayt |
 
 Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
-
-## Çeviri ekranı arayüzü (translate.js)
-- index.html içinde `<section class="screen" id="screen-ceviri"></section>` hazır, boş.
-- translate.js şu fonksiyonu tanımlar: `window.initCeviri = function (root) { ... }`. app.js bunu açılışta bir kere `root = section` ile çağırır.
-- Ekranın en üstünde iOS büyük başlık kullan: `<h1 class="large-title">Çeviri</h1>`.
-- Yardımcılar (app.js global olarak sağlar): `App.store.get(key, varsayılan)`, `App.store.set(key, değer)`, `App.toast(metin)`, `App.haptic()`.
-- localStorage anahtarlarına `ceviri.` öneki koy.
-- Çeviri kaynağı: önce `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=..&tl=..&q=..`, olmazsa MyMemory, o da olmazsa Google Çeviri bağlantısı. Sesli okuma için speechSynthesis.
-- Önerilen özellikler: iki yön, yön değiştirme düğmesi, kopyala, sesli oku, geçmiş, favori ifadeler (iş yerinde sık lazım olan hazır İngilizce kalıplar güzel olur).
 
 ## Tasarım sistemi (styles.css içinde hazır sınıflar)
 - Font: `-apple-system, "SF Pro Text", system-ui`. Açık ve koyu tema `prefers-color-scheme` ile otomatik.
@@ -31,8 +22,8 @@ Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
   - `.group`: yuvarlak köşeli (12px) kart grubu; içinde `.cell` satırları (ayraçlı).
   - `.cell`: `display:flex`, solda içerik, sağda `.cell-detail` gri metin.
   - `.btn` (dolu mavi), `.btn.secondary` (gri dolgu), `.btn.danger`, `.btn.green`; tam genişlik, 50px yükseklik, 12px köşe.
-  - `.segmented`: iOS segment kontrol; içinde `<button>`ler, seçili olana `.active`.
-  - `.input`, `.textarea`: kart renginde, kenarlıksız, 12px köşe.
+  - `.input`: kart renginde, kenarlıksız, 12px köşe.
+  - `.switch`: iOS anahtar. Açıkken `.on`.
   - `.icon-btn`: 40px yuvarlak ikon düğmesi.
 - İkonlar: satır içi SVG, 24px, `stroke="currentColor"`, çizgi kalınlığı 2, emoji kullanma.
 - Boşluk: ekran kenarı 16px, gruplar arası 24px.
@@ -53,3 +44,9 @@ Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
 - Ayarlar: "Yol süresi", "Takvime aktar (.ics)" (60 gün, her vardiyadan 1 saat önce hatırlatma), gizli "Tetris modu" (Nayro'nun yüzü logolu; tetris.js ilk açılışta yüklenir).
 - Erişilebilirlik: süs SVG'lerinde aria-hidden, sekmelerde aria-label/aria-current, pasif ekranlar inert, ay düğmesi etiketleri, toast aria-live, sayfayı aşağı sürükleyerek kapatma, azaltılmış hareket desteği.
 - Manifest açıklamasından çeviri ifadesi kaldırıldı.
+
+## Alarm ve hesap (19 Ekim 2026)
+- Bugün ekranında Alarm anahtarı. Açıkken sıradaki vardiyanın başlangıcından 2 saat önce çalar (düzen ve saatler uygulamadaki vardiya hesabından gelir; izin gününde alarm yok). Sonraki alarm saati aynı kartta görünür.
+- Uygulama açıkken Bildirim API'si ve kısa bir WebAudio sesi. Kilitliyken çalması için "Takvime ekle" (.ics, VALARM). Ayrıntı ve sınırlar uygulama içinde kısa not olarak durur.
+- Ayarlar'da Hesap. `firebase-config.js` boşken "Hesap özelliği henüz kurulmadı"; uygulama geri kalanı hesapsız çalışır. Kurulum: KURULUM-HESAP.md.
+- Servis çalışanı önbelleği v8. Firebase SDK yalnızca hesap açılınca veya oturum varken, gstatic üzerinden yüklenir.

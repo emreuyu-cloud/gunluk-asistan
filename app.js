@@ -19,8 +19,8 @@
     clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     coffee: '<svg viewBox="0 0 24 24"><path d="M4 9h13v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/></svg>',
     trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>',
-    down: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>',
     up: '<svg viewBox="0 0 24 24"><path d="M12 21V9M7 14l5-5 5 5M4 3h16"/></svg>',
+    user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19.5c1.5-3 4-4.5 7-4.5s5.5 1.5 7 4.5"/></svg>',
     share: '<svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 11v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9"/></svg>',
     car: '<svg viewBox="0 0 24 24"><path d="M5 17h14M3 17v-4l2-5a2 2 0 0 1 2-1h10a2 2 0 0 1 2 1l2 5v4h-2M5 17H3"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>',
     cal: '<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 13v5M9.5 15.5h5"/></svg>',
@@ -99,22 +99,29 @@
 
   // ---------- veri ----------
   const DEF = { times: { Sabah: ['06:30', '14:30'], Akşam: ['14:30', '22:30'], Gece: ['22:30', '06:30'] }, breakMin: 60, commuteMin: 45, rotation: { seq: ['Sabah','Sabah','Akşam','Akşam','Gece','Gece','İzin','İzin'], start: '2026-09-01' } };
-  let S = Object.assign({}, DEF, store.get('settings', {}));
-  S.times = Object.assign({}, DEF.times, S.times || {});
-  let fixed = false;
-  for (const k in DEF.times) {
-    const v = S.times[k];
-    if (!Array.isArray(v) || v.length !== 2 || !TIME_RE.test(v[0]) || !TIME_RE.test(v[1]) || v[0] === v[1]) { S.times[k] = DEF.times[k].slice(); fixed = true; }
+  const ALARM_LEAD = 2 * 3600000;
+  function normalizeSettings(raw) {
+    const S = Object.assign({}, DEF, raw || {});
+    S.times = Object.assign({}, DEF.times, S.times || {});
+    let fixed = false;
+    for (const k in DEF.times) {
+      const v = S.times[k];
+      if (!Array.isArray(v) || v.length !== 2 || !TIME_RE.test(v[0]) || !TIME_RE.test(v[1]) || v[0] === v[1]) { S.times[k] = DEF.times[k].slice(); fixed = true; }
+      else S.times[k] = v.slice();
+    }
+    if (!(S.breakMin >= 5 && S.breakMin <= 240)) S.breakMin = DEF.breakMin;
+    if (!(S.commuteMin >= 0 && S.commuteMin <= 180)) S.commuteMin = DEF.commuteMin;
+    if (!S.v || S.v < 2) {
+      const OLD = { Sabah: ['08:00', '16:00'], Akşam: ['16:00', '00:00'], Gece: ['00:00', '08:00'] };
+      for (const k in OLD) if (S.times[k] && S.times[k][0] === OLD[k][0] && S.times[k][1] === OLD[k][1]) S.times[k] = DEF.times[k].slice();
+      if (!S.rotation) S.rotation = DEF.rotation;
+      S.v = 2; fixed = true;
+    }
+    return { S, fixed };
   }
-  if (!(S.breakMin >= 5 && S.breakMin <= 240)) S.breakMin = DEF.breakMin;
-  if (!(S.commuteMin >= 0 && S.commuteMin <= 180)) S.commuteMin = DEF.commuteMin;
-  if (!S.v || S.v < 2) {
-    const OLD = { Sabah: ['08:00', '16:00'], Akşam: ['16:00', '00:00'], Gece: ['00:00', '08:00'] };
-    for (const k in OLD) if (S.times[k] && S.times[k][0] === OLD[k][0] && S.times[k][1] === OLD[k][1]) S.times[k] = DEF.times[k].slice();
-    if (!S.rotation) S.rotation = DEF.rotation;
-    S.v = 2; fixed = true;
-  }
-  if (fixed) store.set('settings', S);
+  const norm0 = normalizeSettings(store.get('settings', {}));
+  let S = norm0.S;
+  if (norm0.fixed) store.set('settings', S);
   let overrides = store.get('overrides', {});
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) overrides = {};
   let breaks = store.get('breaks', []);
@@ -122,7 +129,27 @@
   breaks = breaks.filter(x => x && typeof x.b === 'number' && typeof x.s === 'number' && x.s > x.b);
   let active = store.get('activeBreak', null);
   if (typeof active !== 'number') active = null;
-  const save = () => { store.set('settings', S); store.set('overrides', overrides); store.set('breaks', breaks); store.set('activeBreak', active); };
+  let alarm = store.get('alarm', null);
+  if (!alarm || typeof alarm !== 'object' || Array.isArray(alarm)) alarm = { on: false, lastFired: 0 };
+  alarm.on = !!alarm.on;
+  if (typeof alarm.lastFired !== 'number') alarm.lastFired = 0;
+  let syncAt = store.get('syncAt', 0);
+  if (typeof syncAt !== 'number' || !isFinite(syncAt)) syncAt = 0;
+  let applyingRemote = false;
+  let accountStatusText = 'Giriş yap, verilerini eşitle';
+  try { const gu = store.get('gaUser', null); if (gu && gu.email) accountStatusText = gu.email; } catch (e) {}
+  function touchSync() {
+    if (applyingRemote) return;
+    syncAt = Date.now();
+    store.set('syncAt', syncAt);
+    store.set('alarm', alarm);
+    if (window.GAAccount && GAAccount.push) GAAccount.push();
+  }
+  const save = () => {
+    store.set('settings', S); store.set('overrides', overrides); store.set('breaks', breaks); store.set('activeBreak', active); store.set('alarm', alarm);
+    touchSync();
+    scheduleAlarm();
+  };
 
   function shiftType(dateStr) {
     if (overrides[dateStr]) return overrides[dateStr];
@@ -152,6 +179,119 @@
   function nextShift(now = new Date()) {
     for (let i = 0; i < 60; i++) { const sp = shiftSpan(ymd(addDays(now, i))); if (sp.start && sp.start > now) return sp; }
     return null;
+  }
+  function alarmInfo(sp) {
+    if (!sp || !sp.start) return null;
+    return { at: new Date(sp.start.getTime() - ALARM_LEAD), type: sp.type, b: sp.b, e: sp.e, start: sp.start, end: sp.end, day: ymd(sp.start) };
+  }
+  function alarmsAround(now, from, to) {
+    const out = [];
+    for (let i = from; i < to; i++) { const a = alarmInfo(shiftSpan(ymd(addDays(now, i)))); if (a) out.push(a); }
+    return out;
+  }
+  // Sonraki alarm, vardiya başlangıcından tam 2 saat önce. İzin günlerinde alarm yok.
+  function nextAlarm(now = new Date()) {
+    const t = now.getTime();
+    for (const a of alarmsAround(now, -1, 70)) if (a.at.getTime() > t) return a;
+    return null;
+  }
+  // Kaçırılan alarm yalnızca vardiya henüz başlamadıysa geçerlidir.
+  function dueAlarm(now = new Date()) {
+    const t = now.getTime();
+    let best = null;
+    for (const a of alarmsAround(now, -1, 3)) {
+      const at = a.at.getTime();
+      if (at <= t && at > (alarm.lastFired || 0) && t < a.start.getTime() && (!best || at < best.at.getTime())) best = a;
+    }
+    return best;
+  }
+  let alarmTimer = null;
+  function postAlarm(msg) {
+    if (!('serviceWorker' in navigator)) return;
+    const send = reg => { if (reg && reg.active) reg.active.postMessage(msg); };
+    if (navigator.serviceWorker.controller) send(navigator.serviceWorker.controller && { active: navigator.serviceWorker.controller });
+    navigator.serviceWorker.ready.then(send).catch(() => {});
+  }
+  function unlockAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!unlockAudio.ctx) unlockAudio.ctx = new AC();
+      if (unlockAudio.ctx.state === 'suspended') unlockAudio.ctx.resume().catch(() => {});
+    } catch (e) {}
+  }
+  function beep() {
+    try {
+      const ctx = unlockAudio.ctx;
+      if (!ctx) return;
+      const tone = (freq, t0, dur) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      };
+      const play = () => { const t = ctx.currentTime; tone(880, t, 0.28); tone(1175, t + 0.34, 0.32); };
+      if (ctx.state === 'suspended') ctx.resume().then(play).catch(() => {});
+      else play();
+    } catch (e) {}
+  }
+  function notifyAlarm(info) {
+    const title = 'Vardiya alarmı';
+    const body = info.type + ' vardiyası ' + atTime(info.b) + ' başlıyor';
+    const opts = { body, tag: 'ga-alarm-' + info.at.getTime(), renotify: true };
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const show = reg => reg.showNotification(title, opts).catch(() => { try { new Notification(title, { body, tag: opts.tag }); } catch (e) {} });
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) navigator.serviceWorker.ready.then(show).catch(() => show({ showNotification: (t, o) => Promise.resolve(new Notification(t, o)) }));
+    else { try { new Notification(title, { body, tag: opts.tag }); } catch (e) {} }
+  }
+  function fireAlarm(info) {
+    if (!alarm.on || !info) return null;
+    if ((alarm.lastFired || 0) >= info.at.getTime()) return null;
+    alarm.lastFired = info.at.getTime();
+    store.set('alarm', alarm);
+    beep();
+    notifyAlarm(info);
+    touchSync();
+    if (typeof window.__gaOnAlarm === 'function') { try { window.__gaOnAlarm(info); } catch (e) {} }
+    scheduleAlarm();
+    if (!sheetOpen()) renderBugun();
+    return info;
+  }
+  function scheduleAlarm() {
+    clearTimeout(alarmTimer); alarmTimer = null;
+    if (!alarm.on) { postAlarm({ type: 'alarm-cancel' }); return; }
+    const now = new Date();
+    const due = dueAlarm(now);
+    if (due) { fireAlarm(due); return; }
+    const nx = nextAlarm(now);
+    if (!nx) return;
+    const delta = nx.at.getTime() - now.getTime();
+    const wait = delta > 3600000 ? 3600000 : Math.max(0, delta);
+    alarmTimer = setTimeout(() => { if (alarm.on) scheduleAlarm(); }, wait);
+    postAlarm({ type: 'alarm-schedule', at: nx.at.getTime(), title: 'Vardiya alarmı', body: nx.type + ' vardiyası ' + atTime(nx.b) + ' başlıyor' });
+  }
+  function setAlarmOn(on, skipPast) {
+    alarm.on = !!on;
+    if (on && skipPast) alarm.lastFired = Date.now();
+    store.set('alarm', alarm);
+    touchSync();
+    scheduleAlarm();
+  }
+  async function toggleAlarm() {
+    haptic();
+    if (alarm.on) { setAlarmOn(false); renderAll(); return toast('Alarm kapalı'); }
+    unlockAudio();
+    let perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+    if (perm === 'default') {
+      try { perm = await Notification.requestPermission(); } catch (e) { perm = Notification.permission; }
+    }
+    setAlarmOn(true, true);
+    renderAll();
+    if (perm === 'granted') toast('Alarm açık');
+    else if (perm === 'denied') toast('Bildirim izni yok. Uygulama açıkken ses çalar.');
+    else toast('Alarm açık. Bu cihazda bildirim kısıtlı olabilir.');
   }
   // Mola hangi güne sayılır: vardiya içindeyse vardiyanın başladığı gün (gece vardiyası gece yarısında bölünmez)
   function shiftDay(ts) {
@@ -206,6 +346,21 @@
     }
     return `<div class="section-title">Sıradakiler</div><div class="group">${rows}</div>`;
   }
+  function alarmCard(now) {
+    const nx = nextAlarm(now);
+    const when = nx ? dayLabel(nx.at, now) + ' ' + hm(nx.at) + ' · ' + nx.type : 'Önümüzdeki günlerde vardiya yok';
+    const perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+    let sub = 'Kapalı. Açılınca her vardiyadan 2 saat önce çalar.';
+    if (alarm.on) sub = 'Sonraki: ' + when + (perm === 'denied' ? ' · bildirim izni yok' : '');
+    return `<div class="section-title">Alarm</div>
+      <div class="group">
+        <div class="cell"><div class="dot" style="background:var(--red)">${ICON.bell}</div>
+          <div class="cell-main">Alarm<div class="cell-sub">${esc(sub)}</div></div>
+          <button type="button" class="switch ${alarm.on ? 'on' : ''}" data-act="alarm" role="switch" aria-checked="${alarm.on ? 'true' : 'false'}" aria-label="Alarm"><i></i></button></div>
+        ${alarm.on ? `<div class="cell tap" data-act="alarm-ics" role="button"><div class="cell-main">Takvime ekle<div class="cell-sub">Kilitliyken çalması için telefon takvimi</div></div></div>` : ''}
+      </div>
+      <div class="section-foot">Uygulama açıkken bildirim ve kısa bir ses çalar. iPhone kilitliyken veya uygulama kapalıyken web alarmı çalmaz.</div>`;
+  }
   function renderBugun() {
     const now = new Date(), today = ymd(now), h = now.getHours();
     const greet = h < 6 ? 'İyi geceler' : h < 12 ? 'Günaydın' : h < 18 ? 'İyi günler' : 'İyi akşamlar';
@@ -241,6 +396,7 @@
         <div class="tile"><div class="k">${used > allow ? 'Aşılan süre' : 'Kalan mola'}</div><div class="v" style="color:${used > allow ? 'var(--red)' : 'var(--green)'}">${dur(Math.abs(allow - used) / 6e4)}</div></div>
       </div>
       <div style="margin-top:10px"><button class="btn ${active ? 'danger' : 'green'}" data-act="break">${active ? ICON.stop + ' Molayı bitir · ' + mmss(Date.now() - active) : ICON.play + ' Molaya başla'}</button></div>
+      ${alarmCard(now)}
       ${upcomingHtml(now)}
       <div class="section-title">Önümüzdeki 7 gün</div><div class="group">${week}</div>`;
   }
@@ -422,7 +578,7 @@
   }
   async function exportBackup() {
     const payload = { format: 'ga-backup', v: 1, exportedAt: new Date().toISOString(),
-      data: { settings: S, overrides, breaks, activeBreak: active, tetrisBest: store.get('tetrisBest', 0) } };
+      data: { settings: S, overrides, breaks, activeBreak: active, alarm, syncAt, tetrisBest: store.get('tetrisBest', 0) } };
     const ok = await shareOrDownload('gunluk-asistan-yedek-' + ymd(new Date()) + '.json', JSON.stringify(payload, null, 2), 'application/json');
     if (ok) { store.set('lastBackup', Date.now()); renderAyarlar(); toast('Yedek hazır'); }
   }
@@ -430,12 +586,14 @@
     if (!obj || typeof obj !== 'object') return null;
     const raw = obj.format === 'ga-backup' && obj.data && typeof obj.data === 'object' ? obj.data : obj; // eski biçim: düz anahtar -> metin
     const val = k => { const v = raw[k]; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return undefined; } };
-    const out = {}, st = val('settings'), ov = val('overrides'), br = val('breaks'), ab = val('activeBreak'), tb = val('tetrisBest');
+    const out = {}, st = val('settings'), ov = val('overrides'), br = val('breaks'), ab = val('activeBreak'), tb = val('tetrisBest'), al = val('alarm'), sy = val('syncAt');
     if (st && typeof st === 'object' && !Array.isArray(st)) out.settings = st;
     if (ov && typeof ov === 'object' && !Array.isArray(ov)) out.overrides = Object.fromEntries(Object.entries(ov).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && TYPES.includes(v)));
     if (Array.isArray(br)) out.breaks = br.filter(x => x && typeof x.b === 'number' && typeof x.s === 'number' && x.s > x.b);
     if (typeof ab === 'number') out.activeBreak = ab;
     if (typeof tb === 'number') out.tetrisBest = tb;
+    if (al && typeof al === 'object' && !Array.isArray(al)) out.alarm = { on: !!al.on, lastFired: typeof al.lastFired === 'number' ? al.lastFired : 0 };
+    if (typeof sy === 'number') out.syncAt = sy;
     return out.settings || out.breaks || out.overrides ? out : null;
   }
   function restoreFrom(file) {
@@ -450,9 +608,9 @@
         <div class="stack" style="margin-top:20px"><button class="btn" data-rs="ok">Geri yükle</button><button class="btn secondary" data-rs="no">Vazgeç</button></div>`, root => {
         root.querySelector('[data-rs=no]').onclick = closeSheet;
         root.querySelector('[data-rs=ok]').onclick = () => {
-          const ok = ['settings', 'overrides', 'breaks', 'activeBreak', 'tetrisBest'].every(k => {
+          const ok = ['settings', 'overrides', 'breaks', 'activeBreak', 'alarm', 'syncAt', 'tetrisBest'].every(k => {
             if (k in d) return store.set(k, d[k]);
-            if (k !== 'tetrisBest') { try { localStorage.removeItem(k); } catch (e) {} }
+            if (k !== 'tetrisBest' && k !== 'alarm' && k !== 'syncAt') { try { localStorage.removeItem(k); } catch (e) {} }
             return true;
           });
           if (!ok) return;
@@ -486,6 +644,29 @@
     const ok = await shareOrDownload('vardiyalar-' + ymd(new Date()) + '.ics', text, 'text/calendar');
     if (ok) toast(n + ' vardiya takvim dosyasına eklendi');
   }
+  function buildAlarmIcs() {
+    const now = new Date(), utc = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gunluk Asistan//TR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Vardiya alarmları', 'X-WR-TIMEZONE:Europe/Istanbul',
+      'BEGIN:VTIMEZONE', 'TZID:Europe/Istanbul', 'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0300', 'TZOFFSETTO:+0300', 'TZNAME:+03', 'END:STANDARD', 'END:VTIMEZONE'];
+    let n = 0;
+    for (const a of alarmsAround(now, -1, 60)) {
+      if (a.at <= now) continue;
+      n++;
+      const end = new Date(a.at.getTime() + 5 * 60000);
+      L.push('BEGIN:VEVENT', 'UID:alarm-' + a.day + '-' + a.b.replace(':', '') + '@gunluk-asistan', 'DTSTAMP:' + utc,
+        'DTSTART;TZID=Europe/Istanbul:' + icsStamp(a.at), 'DTEND;TZID=Europe/Istanbul:' + icsStamp(end),
+        'SUMMARY:Vardiya alarmı ' + a.type + ' ' + a.b, 'DESCRIPTION:' + a.type + ' vardiyası ' + a.b + ' de başlıyor. Alarm 2 saat önce.',
+        'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + a.type + ' vardiyası 2 saat sonra', 'TRIGGER:-PT1S', 'END:VALARM', 'END:VEVENT');
+    }
+    L.push('END:VCALENDAR');
+    return { text: L.join('\r\n') + '\r\n', n };
+  }
+  async function exportAlarmIcs() {
+    const { text, n } = buildAlarmIcs();
+    if (!n) return toast('Önümüzdeki günlerde alarm yok');
+    const ok = await shareOrDownload('vardiya-alarmlari-' + ymd(new Date()) + '.ics', text, 'text/calendar');
+    if (ok) toast(n + ' alarm takvim dosyasına eklendi');
+  }
 
   // ---------- AYARLAR ----------
   function renderAyarlar() {
@@ -513,7 +694,10 @@
         <div class="cell tap" data-act="reset" role="button"><div class="dot" style="background:var(--red)">${ICON.trash}</div><div class="cell-main" style="color:var(--red)">Tüm verileri sil</div></div>
       </div>
       <input type="file" id="restore-file" accept="application/json,.json" hidden>
-      <div class="section-foot">Verilerin yalnızca bu telefonda saklanır, hiçbir yere gönderilmez. Ara sıra yedek alıp Dosyalar'a kaydetmen iyi olur.</div>
+      <div class="section-foot">Verilerin bu telefonda durur. Hesaba girince diğer cihazlarla da eşitlenir. Ara sıra yedek alıp Dosyalar'a kaydetmen iyi olur.</div>
+      <div class="section-title">Hesap</div>
+      <div class="group"><div class="cell tap chev" data-act="account" role="button"><div class="dot" style="background:var(--accent)">${ICON.user}</div><div class="cell-main">Hesap<div class="cell-sub" id="account-sub">${esc(accountStatusText)}</div></div></div></div>
+      <div class="section-foot">Google veya e-posta ile giriş. Kurulmadıysa uygulama eskisi gibi çalışır.</div>
       <div class="group" style="margin-top:24px"><div class="cell tap chev" data-act="tetris" role="button"><span class="nayro-logo">${nayroLogo()}</span><div class="cell-main">Tetris modu</div></div></div>
       <div class="empty" style="padding-top:36px">Günlük Asistan 4.0<br>Nayro ve nayronayt</div>`;
     $('#screen-ayarlar').querySelectorAll('[data-time]').forEach(inp => inp.onchange = () => {
@@ -557,12 +741,89 @@
       case 'export': return exportBackup();
       case 'restore': return $('#restore-file').click();
       case 'ics': return exportIcs();
+      case 'alarm': return toggleAlarm();
+      case 'alarm-ics': return exportAlarmIcs();
+      case 'account': return loadAccount(true);
       case 'tetris': return openTetris();
-      case 'reset': return confirmSheet('Tüm veriler silinsin mi?', 'Vardiya düzeni, gün değişiklikleri ve mola kayıtlarının hepsi silinir. Bu geri alınamaz.', 'Tüm verileri sil', () => { localStorage.clear(); location.reload(); });
+      case 'reset': return confirmSheet('Tüm veriler silinsin mi?', 'Vardiya düzeni, gün değişiklikleri ve mola kayıtlarının hepsi silinir. Bu geri alınamaz.', 'Tüm verileri sil', () => {
+        const done = () => { localStorage.clear(); location.reload(); };
+        if (window.GAAccount && GAAccount.wipe) GAAccount.wipe().then(done, done);
+        else done();
+      });
     }
   }
 
   function renderAll() { renderBugun(); renderVardiya(); renderMola(); renderAyarlar(); }
+  function setAccountStatus(t) {
+    accountStatusText = t || 'Giriş yap, verilerini eşitle';
+    const el = document.getElementById('account-sub');
+    if (el) el.textContent = accountStatusText;
+  }
+  function cleanPayload(data) {
+    const src = data && typeof data === 'object' ? data : {};
+    const norm = normalizeSettings(src.settings || S);
+    const ov = src.overrides && typeof src.overrides === 'object' && !Array.isArray(src.overrides) ? src.overrides : {};
+    const overridesOut = Object.fromEntries(Object.entries(ov).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && TYPES.includes(v)));
+    const br = Array.isArray(src.breaks) ? src.breaks.filter(x => x && typeof x.b === 'number' && typeof x.s === 'number' && x.s > x.b).map(x => ({ b: x.b, s: x.s })) : [];
+    const al = src.alarm && typeof src.alarm === 'object' ? src.alarm : alarm;
+    return {
+      v: 1,
+      updatedAt: typeof src.updatedAt === 'number' ? src.updatedAt : 0,
+      settings: norm.S,
+      overrides: overridesOut,
+      breaks: br,
+      activeBreak: typeof src.activeBreak === 'number' ? src.activeBreak : null,
+      alarm: { on: !!al.on, lastFired: typeof al.lastFired === 'number' ? al.lastFired : 0 }
+    };
+  }
+  function getSyncPayload() {
+    return { v: 1, updatedAt: syncAt || 0, settings: S, overrides, breaks, activeBreak: active, alarm: { on: !!alarm.on, lastFired: alarm.lastFired || 0 } };
+  }
+  function mergeSync(local, remote) {
+    const L = cleanPayload(local), R = cleanPayload(remote);
+    const newer = (R.updatedAt || 0) > (L.updatedAt || 0) ? R : L;
+    const older = newer === R ? L : R;
+    const map = new Map();
+    for (const b of [...older.breaks, ...newer.breaks]) map.set(b.b + ':' + b.s, b);
+    const breaks = [...map.values()].sort((a, b) => a.b - b.b);
+    const overrides = Object.assign({}, older.overrides, newer.overrides);
+    const newerBreaks = [...newer.breaks].sort((a, b) => a.b - b.b);
+    const changed = JSON.stringify(breaks) !== JSON.stringify(newerBreaks) || JSON.stringify(overrides) !== JSON.stringify(newer.overrides);
+    return {
+      v: 1,
+      updatedAt: changed ? Date.now() : (newer.updatedAt || 0),
+      settings: newer.settings,
+      overrides,
+      breaks,
+      activeBreak: newer.activeBreak,
+      alarm: newer.alarm
+    };
+  }
+  function applySyncPayload(data) {
+    const p = cleanPayload(data);
+    applyingRemote = true;
+    try {
+      S = p.settings;
+      overrides = p.overrides;
+      breaks = p.breaks;
+      active = p.activeBreak;
+      alarm = p.alarm;
+      syncAt = typeof data.updatedAt === 'number' ? data.updatedAt : syncAt;
+      store.set('settings', S); store.set('overrides', overrides); store.set('breaks', breaks); store.set('activeBreak', active); store.set('alarm', alarm); store.set('syncAt', syncAt);
+    } finally { applyingRemote = false; }
+    scheduleAlarm();
+    renderAll();
+  }
+  function loadAccount(open) {
+    if (open) window.__gaAccountOpen = true;
+    if (window.GAAccount) { if (open) GAAccount.open(); else GAAccount.bootIfNeeded(); return; }
+    if (loadAccount.started) return;
+    loadAccount.started = true;
+    const s = document.createElement('script');
+    s.src = 'account.js';
+    s.onerror = () => { loadAccount.started = false; if (open) toast('Hesap ekranı yüklenemedi'); };
+    document.body.appendChild(s);
+  }
 
   function show(name) {
     document.querySelectorAll('.screen').forEach(s => {
@@ -633,10 +894,26 @@
       }
     }, 1000);
     setInterval(() => { if (!sheetOpen()) { renderBugun(); renderMola(); } }, 30000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (!sheetOpen()) renderAll(); checkForgotten(); } });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) { scheduleAlarm(); if (!sheetOpen()) renderAll(); checkForgotten(); }
+    });
+    setInterval(() => { if (alarm.on && dueAlarm(new Date())) scheduleAlarm(); }, 15000);
     setTimeout(checkForgotten, 600);
     initUpdates();
+    scheduleAlarm();
+    try {
+      if (store.get('gaUser', null) || sessionStorage.getItem('ga-auth-redirect') === '1') loadAccount(false);
+    } catch (e) {}
   }
 
-  window.App = { boot, store, toast, haptic, openSheet, closeSheet, shiftType, shiftSpan, show, nayroLogo, openTetris };
+  window.App = {
+    boot, store, toast, haptic, openSheet, closeSheet, shiftType, shiftSpan, show, nayroLogo, openTetris,
+    nextAlarm, dueAlarm, getSyncPayload, applySyncPayload, mergeSync, setAccountStatus,
+    _setAlarm: on => { setAlarmOn(!!on, false); },
+    _tickAlarm(now) {
+      if (!alarm.on) return null;
+      const due = dueAlarm(now instanceof Date ? now : new Date(now));
+      return due ? fireAlarm(due) : null;
+    }
+  };
 })();

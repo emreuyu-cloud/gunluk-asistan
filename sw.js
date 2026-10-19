@@ -1,4 +1,4 @@
-const CACHE = 'gunluk-asistan-v7';
+const CACHE = 'gunluk-asistan-v8';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'tetris.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 const TIMEOUT = 3000;
 self.addEventListener('install', e => {
@@ -21,4 +21,36 @@ self.addEventListener('fetch', e => {
       .then(r => r || caches.match(req, { ignoreSearch: true }).then(c => c || net.then(o => o.r)))
       .catch(() => caches.match(req.mode === 'navigate' ? 'index.html' : req, { ignoreSearch: true }).then(c => c || caches.match('index.html')).then(c => c || Response.error()))
   );
+});
+
+// Chrome TimestampTrigger varsa alarmı tarayıcıya bırakır. Yoksa sayfa kendisi çalar.
+async function clearScheduled() {
+  const opts = { tag: 'ga-alarm-next' };
+  let list = [];
+  try { list = await self.registration.getNotifications(Object.assign({ includeTriggered: true }, opts)); }
+  catch (e) { try { list = await self.registration.getNotifications(opts); } catch (e2) {} }
+  list.forEach(n => n.close());
+}
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.type === 'alarm-cancel') { e.waitUntil(clearScheduled()); return; }
+  if (d.type !== 'alarm-schedule' || typeof d.at !== 'number') return;
+  e.waitUntil((async () => {
+    await clearScheduled();
+    if (typeof TimestampTrigger !== 'function') return;
+    try {
+      await self.registration.showNotification(d.title || 'Vardiya alarmı', {
+        body: d.body || '',
+        tag: 'ga-alarm-next',
+        showTrigger: new TimestampTrigger(d.at)
+      });
+    } catch (err) {}
+  })());
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+    for (const c of cs) if (c.url && 'focus' in c) return c.focus();
+    return self.clients.openWindow('./');
+  }));
 });
