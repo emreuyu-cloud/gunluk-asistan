@@ -388,6 +388,7 @@
         <div class="cell-detail">${s.type ? (s.start ? s.type + ' · ' + s.b + '-' + s.e : 'İzin') : '-'}</div></div>`;
     }
     $('#screen-bugun').innerHTML = `
+      <img class="brand-mark" src="icons/icon-180.png" alt="TGS" width="36" height="36">
       <div class="subtitle" style="margin:8px 0 0">${longDate(now)}</div>
       <h1 class="large-title" style="margin-top:2px">${greet}</h1>
       ${hero}
@@ -699,7 +700,7 @@
       <div class="group"><div class="cell tap chev" data-act="account" role="button"><div class="dot" style="background:var(--accent)">${ICON.user}</div><div class="cell-main">Hesap<div class="cell-sub" id="account-sub">${esc(accountStatusText)}</div></div></div></div>
       <div class="section-foot">Google veya e-posta ile giriş. Kurulmadıysa uygulama eskisi gibi çalışır.</div>
       <div class="group" style="margin-top:24px"><div class="cell tap chev" data-act="tetris" role="button"><span class="nayro-logo">${nayroLogo()}</span><div class="cell-main">Tetris modu</div></div></div>
-      <div class="empty" style="padding-top:36px">Günlük Asistan 4.0<br>Nayro ve nayronayt</div>`;
+      <div class="empty brand-foot"><img class="brand-mark" src="icons/icon-180.png" alt="" width="44" height="44"><div>Günlük Asistan 4.0<br>Nayro ve nayronayt</div></div>`;
     $('#screen-ayarlar').querySelectorAll('[data-time]').forEach(inp => inp.onchange = () => {
       const [k, i] = inp.dataset.time.split('-');
       if (!TIME_RE.test(inp.value)) { inp.value = S.times[k][+i]; return; }

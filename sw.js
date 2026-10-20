@@ -1,4 +1,4 @@
-const CACHE = 'gunluk-asistan-v9';
+const CACHE = 'gunluk-asistan-v10';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'account.js', 'firebase-config.js', 'tetris.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 const TIMEOUT = 3000;
 self.addEventListener('install', e => {
