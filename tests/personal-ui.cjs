@@ -2,6 +2,7 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');const path=require('node:path');
 (async()=>{
  const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL || undefined,headless:true});const c=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2});const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(process.env.APP_URL || 'http://127.0.0.1:4173');
+ await p.clock.setFixedTime(new Date('2026-10-21T12:00:00+03:00')); await p.reload();
  const passed=[];
  for(const width of [320,390,768,1440]){
   await p.setViewportSize({width,height:width===320?568:900});

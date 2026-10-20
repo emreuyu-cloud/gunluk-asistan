@@ -101,6 +101,7 @@
   function haptic() { try { navigator.vibrate && navigator.vibrate(10); } catch (e) {} }
   let sheetReturnFocus = null;
   function openSheet(html, onMount) {
+    window.dispatchEvent(new Event('ga:sheetclose'));
     const s = $('#sheet');
     if (!sheetOpen()) sheetReturnFocus = document.activeElement;
     s.style.transform = ''; $('#sheet-body').innerHTML = html;
@@ -113,6 +114,7 @@
     $('.sheet-close').focus({ preventScroll: true });
   }
   function closeSheet() {
+    window.dispatchEvent(new Event('ga:sheetclose'));
     const s = $('#sheet'); s.style.transform = ''; s.classList.remove('on', 'drag'); s.inert = true;
     $('#sheet-backdrop').classList.remove('on'); $('#screens').inert = false; $('#tabbar').inert = false;
     const target = sheetReturnFocus && sheetReturnFocus.isConnected ? sheetReturnFocus : $('#tabbar button.active');
@@ -883,6 +885,7 @@
   }
 
   function show(name) {
+    window.dispatchEvent(new CustomEvent('ga:screenchange',{detail:name}));
     if (name === 'ekip') loadGroups();
     document.querySelectorAll('.screen').forEach(s => {
       const on = s.id === 'screen-' + name;

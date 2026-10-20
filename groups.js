@@ -4,10 +4,12 @@
   const $ = s => document.querySelector(s);
   const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const header = '<header class="page-header"><p class="eyebrow">Günlük Asistan</p><h1 class="large-title">Ekip</h1><p class="subtitle">Aynı vardiya, aynı ekip.</p></header>';
-  const privacy = 'Katıldığın odalarda adın ve mola durumun paylaşılır. Kişisel vardiya takvimin ve alarmların paylaşılmaz.';
+  const privacy = 'Katıldığın odalarda adın, profil fotoğrafın ve mola durumun paylaşılır. Kişisel vardiya takvimin ve alarmların paylaşılmaz.';
   let ctx, user, rooms = [], selected = null, members = [], messages = [], roomName = '';
   let listUnsub, roomUnsubs = [], epoch = 0, opening = null, errorText = '', connected = false, invite = null;
   let manualState = null, lastBreakStart = null, draft = '', sending = false;
+  const mediaUrls = new Map(); let roomVersion = 0;
+  function releaseMedia() { document.querySelectorAll('#team-messages audio').forEach(a=>{a.pause();a.removeAttribute('src');a.load();}); mediaUrls.forEach(url=>URL.revokeObjectURL(url)); mediaUrls.clear(); }
   const ms = t => t && typeof t.toMillis === 'function' ? t.toMillis() : 0;
   const ref = (...parts) => ctx.fs.doc(ctx.db, ...parts);
   const token = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
@@ -28,7 +30,7 @@
     }
     return GAAccount.connection();
   }
-  function stopRoom() { roomUnsubs.forEach(fn => fn()); roomUnsubs = []; members = []; messages = []; selected = null; draft = ''; sending = false; }
+  function stopRoom() { roomVersion++;releaseMedia();roomUnsubs.forEach(fn => fn()); roomUnsubs = []; members = []; messages = []; selected = null; draft = ''; sending = false; }
   function clear() { epoch++; listUnsub?.(); listUnsub = null; stopRoom(); rooms = []; invite = null; errorText = ''; connected = false; manualState = null; }
   function home() {
     if (selected) return;
@@ -37,7 +39,8 @@
       root.innerHTML = header + `<div class="team-intro"><div class="team-symbol" aria-hidden="true">↗</div><h2>Ekibinle bağlantıda kal.</h2><p>Kendi odanı oluştur, davetini paylaş. Kim molada, kim dönüyor; tek yerden gör.</p><button class="btn" data-team="login">Google veya e-posta ile giriş</button><div class="section-foot">${inviteToken() ? 'Davetin hazır. Giriş yaptıktan sonra odaya katılabilirsin.' : 'Bireysel kullanım için hesap veya ekip gerekmez.'}</div></div><div class="section-foot">${privacy}</div>`;
       return;
     }
-    root.innerHTML = header + `<div class="team-identity"><span class="avatar">${esc((user.displayName || 'E')[0])}</span><div><strong>${esc(user.displayName || 'Ekip hesabın')}</strong><div class="cell-sub">${esc(user.email)}</div></div></div>
+    const profile = GAAccount.profile();
+    root.innerHTML = header + `<button class="team-identity profile-link" data-team="profile" aria-label="Profilimi düzenle">${GAMedia.avatar(profile.avatar,profile.name)}<span><strong>${esc(profile.name || 'Profilini tamamla')}</strong><span class="cell-sub">Profilimi düzenle</span></span><span class="profile-chevron" aria-hidden="true">›</span></button>
       <div id="team-alert" role="status">${errorText ? `<div class="team-notice">${esc(errorText)} <button class="btn plain" data-team="retry">Yeniden dene</button></div>` : ''}</div>
       ${invite ? `<div class="invite-card"><p class="eyebrow">Oda daveti</p><h2>${esc(invite.name)}</h2><p>${privacy}</p><button class="btn" data-team="join">Odaya katıl</button><button class="btn plain" data-team="dismiss-invite">Şimdi değil</button></div>` : ''}
       <div class="section-title">Odaların <span class="count">${rooms.length}</span></div>
@@ -87,7 +90,7 @@
   function identityForm(title, nameLabel, callback, withRoom) {
     App.openSheet(`<h3>${title}</h3><form id="team-form" class="stack">
       ${withRoom ? '<label class="form-label" for="room-name">Oda adı</label><input class="input" id="room-name" required maxlength="60" placeholder="Örn. F kontuvarı ekibi">' : ''}
-      <label class="form-label" for="member-name">Ekipte görünecek adın</label><input class="input" id="member-name" required maxlength="40" autocomplete="name" value="${esc(user.displayName || App.store.get('teamName:' + user.uid, ''))}" placeholder="Adın">
+      <label class="form-label" for="member-name">Ekipte görünecek adın</label><input class="input" id="member-name" required maxlength="40" autocomplete="name" value="${esc(GAAccount.profile().name || user.displayName || App.store.get('teamName:' + user.uid, ''))}" placeholder="Adın">
       <p class="section-foot">${privacy}</p><p class="form-error" role="alert"></p><button class="btn" type="submit">${nameLabel}</button></form>`, root => {
       root.querySelector('form').onsubmit = async e => {
         e.preventDefault(); const name = root.querySelector('#member-name').value.trim(); const room = withRoom ? root.querySelector('#room-name').value.trim() : null;
@@ -100,7 +103,7 @@
     });
   }
   function membership(name, joinToken) {
-    return {name, uid:user.uid, joinToken, joinedAt:ctx.fs.serverTimestamp(), updatedAt:ctx.fs.serverTimestamp(), ...App.breakPresence()};
+    return {name, avatar:GAAccount.profile().avatar || '', uid:user.uid, joinToken, joinedAt:ctx.fs.serverTimestamp(), updatedAt:ctx.fs.serverTimestamp(), ...App.breakPresence()};
   }
   function create() {
     identityForm('Yeni oda', 'Odayı oluştur', async (name, room) => {
@@ -133,12 +136,14 @@
       <div class="section-title">Sohbet <span class="cell-sub">Son 60 mesaj</span></div>
       <div id="team-messages" class="messages" role="log" aria-label="Ekip mesajları" aria-live="polite"><div class="empty">Mesajlar yükleniyor…</div></div>
       <form id="team-compose" class="composer"><label class="sr-only" for="team-message">Mesajın</label><textarea id="team-message" rows="2" maxlength="2000" placeholder="Ekibine bir mesaj yaz…" required></textarea><button class="icon-btn" type="submit" aria-label="Mesaj gönder">↑</button></form>
+      <div class="attachment-actions"><button class="btn secondary" data-team="photo" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.5"/><path d="m4 17 5-5 4 4 3-3 5 5"/></svg>Fotoğraf</button><button class="btn secondary" data-team="voice" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>Sesli mesaj</button></div>
       <div id="message-error" class="form-error" role="alert"></div><button class="btn plain danger" data-team="leave">Odadan ayrıl</button>`;
     $('#team-message').value = draft;
     $('#team-message').oninput = e => { draft = e.target.value; };
     $('#team-compose').onsubmit = send;
   }
   function roomError(e) {
+    if(e?.code==='permission-denied'){roomVersion++;releaseMedia();const log=$('#team-messages');if(log)log.innerHTML='<div class="empty">Odaya erişim izni gerekiyor.</div>';}
     $('#team-alert').textContent = err(e);
     $('#team-alert').className = 'team-notice';
   }
@@ -174,13 +179,23 @@
     const el = $('#team-members'); if (!el) return;
     el.innerHTML = members.map(m=>{
       const age = ms(m.updatedAt) ? Math.max(0, Math.floor((Date.now()-ms(m.updatedAt))/60000)) : null;
-      return `<div class="cell"><span class="avatar ${m.state === 'break' ? 'on-break' : ''}">${esc(m.name[0])}</span><div class="cell-main">${esc(m.name)}${m.uid === user.uid ? ' <span class="cell-sub">(sen)</span>' : ''}<div class="cell-sub">${age !== null && age >= 2 ? 'Son bilgi: ' + age + ' dk önce' : 'Az önce güncellendi'}</div></div><span class="member-state state-${esc(m.state)}">${esc(stateText(m))}</span></div>`;
+      return `<div class="cell">${GAMedia.avatar(m.avatar,m.name,m.state === 'break' ? 'on-break' : '')}<div class="cell-main">${esc(m.name)}${m.uid === user.uid ? ' <span class="cell-sub">(sen)</span>' : ''}<div class="cell-sub">${age !== null && age >= 2 ? 'Son bilgi: ' + age + ' dk önce' : 'Az önce güncellendi'}</div></div><span class="member-state state-${esc(m.state)}">${esc(stateText(m))}</span></div>`;
     }).join('') || '<div class="empty">Üyeler bekleniyor…</div>';
   }
   function drawMessages() {
     const el = $('#team-messages'); if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
-    el.innerHTML = messages.map(m=>`<article class="message ${m.uid === user.uid ? 'mine' : ''}"><div class="message-author">${esc(m.name)} <time>${m.pending ? 'Gönderiliyor…' : ms(m.createdAt) ? new Date(ms(m.createdAt)).toLocaleTimeString('tr',{hour:'2-digit',minute:'2-digit'}) : ''}</time></div><p>${esc(m.text)}</p></article>`).join('') || '<div class="empty">Sohbeti sen başlat.<br>Bu odanın mesajlarını yalnız üyeler görebilir.</div>';
+    const existing=new Map([...el.querySelectorAll('[data-message-id]')].map(n=>[n.dataset.messageId,n]));
+    el.querySelector('.empty')?.remove();
+    for(const m of messages){
+      let article=existing.get(m.id);existing.delete(m.id);
+      if(!article){article=document.createElement('article');article.dataset.messageId=m.id;article.className='message'+(m.uid===user.uid?' mine':'');article.innerHTML='<div class="message-author"></div><div class="message-content"></div>';el.appendChild(article);
+        article.querySelector('.message-content').innerHTML=m.kind==='image'||m.kind==='audio'?`<button class="media-load" data-media-id="${esc(m.id)}">${m.kind==='image'?'Fotoğrafı aç':'Sesli mesajı yükle · '+m.duration+' sn'}<span class="cell-sub">${Math.ceil(m.size/1024)} KB</span></button>`:`<p>${esc(m.text)}</p>`;
+      }
+      article.querySelector('.message-author').innerHTML=`${esc(m.name)} <time>${m.pending?'Gönderiliyor…':ms(m.createdAt)?new Date(ms(m.createdAt)).toLocaleTimeString('tr',{hour:'2-digit',minute:'2-digit'}):''}</time>`;
+    }
+    existing.forEach((node,id)=>{node.querySelector('audio')?.pause();node.remove();const url=mediaUrls.get(id);if(url)URL.revokeObjectURL(url);mediaUrls.delete(id);});
+    if(!messages.length)el.innerHTML='<div class="empty">Sohbeti sen başlat.<br>Bu odanın mesajlarını yalnız üyeler görebilir.</div>';
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }
   async function send(e) {
@@ -193,6 +208,36 @@
       if (selected === id) { draft = ''; $('#team-message').value = ''; }
     } catch (e) { if (selected === id) $('#message-error').textContent = err(e); }
     finally { if (selected === id) { sending = false; button.disabled = false; } }
+  }
+  function mediaComposer(kind) {
+    const id=selected,version=roomVersion,accountUid=user?.uid;
+    if(!members.some(m=>m.uid===accountUid))return App.toast('Önce üyelik bilgilerin yüklenmeli');
+    GAMedia.composer(kind,async payload=>{
+      requireOnline();if(selected!==id||roomVersion!==version||user?.uid!==accountUid)throw new Error('Oda değişti. Paylaşımı yeniden aç.');
+      const me=members.find(m=>m.uid===accountUid);if(!me)throw new Error('Oda üyeliğin bulunamadı.');
+      const {blob,mime,size,duration}=payload;
+      if(size>GAMedia.MAX_BYTES||size!==blob.size)throw new Error('Dosya boyutu sınırı aşıldı.');
+      const bytes=ctx.fs.Bytes.fromUint8Array(new Uint8Array(await blob.arrayBuffer()));
+      const message=ctx.fs.doc(ctx.fs.collection(ctx.db,'rooms',id,'messages'));
+      const batch=ctx.fs.writeBatch(ctx.db);
+      batch.set(message,{uid:accountUid,name:me.name,kind,mime,size,duration,attachmentId:message.id,createdAt:ctx.fs.serverTimestamp()});
+      batch.set(ref('rooms',id,'attachments',message.id),{uid:accountUid,kind,mime,size,duration,data:bytes,createdAt:ctx.fs.serverTimestamp()});
+      await batch.commit();
+    });
+  }
+  async function loadMedia(button) {
+    const id=selected,version=roomVersion,message=messages.find(m=>m.id===button.dataset.mediaId);
+    if(!message||button.disabled)return;button.disabled=true;const label=button.innerHTML;button.textContent='Yükleniyor…';
+    try{
+      requireOnline();const snap=await ctx.fs.getDocFromServer(ref('rooms',id,'attachments',message.id));
+      if(selected!==id||roomVersion!==version||!button.isConnected)return;
+      if(!snap.exists())throw new Error('Dosya bulunamadı.');const d=snap.data(),bytes=d.data?.toUint8Array();
+      if(!bytes||bytes.length>GAMedia.MAX_BYTES||!['image/jpeg','audio/mp4','audio/webm','audio/ogg'].includes(d.mime)||d.kind!==message.kind)throw new Error('Dosya biçimi desteklenmiyor.');
+      const url=URL.createObjectURL(new Blob([bytes],{type:d.mime}));mediaUrls.set(message.id,url);
+      const element=document.createElement(message.kind==='image'?'img':'audio');element.src=url;
+      if(message.kind==='image'){element.alt=message.name+' tarafından gönderilen fotoğraf';element.className='message-photo';}else{element.controls=true;element.preload='metadata';element.setAttribute('aria-label',message.name+' sesli mesajı');}
+      button.replaceWith(element);
+    }catch(e){if(button.isConnected){button.innerHTML=label;button.disabled=false;App.toast(GAMedia.friendly(e));}}
   }
   async function publishPresence() {
     if (!ctx || !user || !navigator.onLine || !rooms.length) return;
@@ -237,9 +282,12 @@
     });
   }
   document.addEventListener('click', e => {
+    const media=e.target.closest('[data-media-id]');if(media)return loadMedia(media);
     const r=e.target.closest('[data-room]'); if(r) return openRoom(r.dataset.room,rooms.find(x=>x.id===r.dataset.room).name);
     const action=e.target.closest('[data-team]')?.dataset.team;
     if(action==='login') return GAAccount.open();
+    if(action==='profile') return GAProfile.open();
+    if(action==='photo'||action==='voice') return mediaComposer(action==='photo'?'image':'audio');
     if(action==='retry') {clear();return boot();}
     if(action==='create') return create();
     if(action==='join') return join();
@@ -250,6 +298,10 @@
     if(action==='returning'||action==='ready') return setState(action);
   });
   window.addEventListener('ga:auth',()=>{clear();user=null;home();setTimeout(boot,0);});
+  window.addEventListener('ga:profile',()=>{if(!selected)home();});
+  const pauseAudio=()=>document.querySelectorAll('#team-messages audio').forEach(a=>a.pause());
+  window.addEventListener('ga:screenchange',e=>{if(e.detail!=='ekip')pauseAudio();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseAudio();});
   window.addEventListener('ga:breakchange',()=>{
     const start = App.breakPresence().breakStartedAt;
     if (start !== lastBreakStart) {

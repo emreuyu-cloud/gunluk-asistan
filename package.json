@@ -6,7 +6,8 @@
     "emulators": "firebase emulators:start --only auth,firestore --project demo-gunluk",
     "preview": "node tests/preview.cjs",
     "test:ui": "node tests/personal-ui.cjs && node tests/team-ui.cjs",
-    "test:feedback": "node tests/feedback-ui.cjs"
+    "test:feedback": "node tests/feedback-ui.cjs",
+    "test:media": "node tests/media-ui.cjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",

@@ -1,10 +1,10 @@
 # Ekip odaları — kurulum ve doğrulama
 
-Mevcut `firebase-config.js`, `gunluk-asistan-df06c` projesini tanımlıyor. Google ve e-posta/parola giriş kodu zaten vardı; korundu. Yeni proje veya yeni hesap servisi gerekmiyor. Firebase Console'daki etkin sağlayıcılar ve üretim kuralları bu çalışma sırasında değiştirilmedi veya doğrulanmadı.
+Mevcut `firebase-config.js`, `gunluk-asistan-df06c` projesini tanımlıyor. Google ve e-posta/parola giriş kodu zaten vardı; korundu. Yeni proje veya yeni hesap servisi gerekmiyor. İlk ekip kuralları 21 Ekim 2026'da Firebase Console üzerinden yayımlandı. Profil ve medya sürümü için güncel `firestore.rules` kullanılmalı; ayrıntılar `PROFIL-MEDYA.md` dosyasında.
 
 ## Canlıya almadan önce gerekli işlem
 
-**Bu sürüm yalnız yerelde hazırlandı; GitHub'a veya Firebase'e yayımlanmadı.**
+**Yeni bir kurulumda veya kural değişikliğinde, web kodundan önce güncel erişim kuralları yayımlanmalıdır.**
 
 Mevcut belgelendirmedeki yalnız `users/{uid}` erişimine izin veren kurallar ekip koleksiyonlarını açmaz. Mevcut üretim kurallarını yedekleyip bu depodaki **`firestore.rules`** ile karşılaştırın. Ek bir uygulamanızın koleksiyonları varsa kuralları körlemesine değiştirmeyin. Uygulamanın kişisel verisi `users/{uid}/data/state` yolunda korunur. Ekip kurallarını Firebase Console > Firestore Database > Rules alanından yetkili kişi yayımlamalıdır. Bu adım burada yapılmadı.
 
@@ -13,6 +13,7 @@ Google ve E-posta/Parola sağlayıcıları etkin olmalı. Kullanılan yayın adr
 ## Kullanım
 
 - Kişisel vardiya, mola ve alarm hesap olmadan çalışır.
+- Profil fotoğrafı, odada küçük fotoğraf ve en fazla 30 saniyelik sesli mesaj desteklenir. Dosyalar açık bağlantı verilmeden yalnız oda üyelerine sunulur. Spark kotaları geçerlidir.
 - Ekip sekmesinde mevcut Google veya e-posta hesabıyla giriş yapılır.
 - Her kullanıcı istediği adla oda oluşturabilir. Merkezi yönetici ve zorunlu ekip üyeliği yoktur.
 - Her üye 7 gün geçerli davet bağlantısı oluşturabilir, kopyalayabilir veya telefonun paylaşım menüsünü açabilir. Bağlantıyı bilen, giriş yapmış kişiler katılabilir. Daveti oluşturan kişi aynı paylaşım ekranından o daveti iptal edebilir.
@@ -20,7 +21,7 @@ Google ve E-posta/Parola sağlayıcıları etkin olmalı. Kullanılan yayın adr
 - Mola başlangıcı/bitişi katılınan odalara aktarılır. `Geliyorum` ve `Döndüm` durumları elle seçilebilir. `Döndüm`, devam eden kişisel molayı da bitirir.
 - Mola bitiş tahmini günlük kalan mola hakkından hesaplanır; sürenin dolması otomatik olarak “döndü” sayılmaz.
 - Uygulama açıkken durumlar değişikliklerde ve dakikada bir güncellenir. Kapalı uygulamada arka plan bağlantısı veya çevrimiçi olma garantisi yoktur; eski durumların son güncelleme zamanı gösterilir.
-- Sohbet son 60 mesajı gösterir. Eski mesajlar veritabanından silinmez. Bildirim, dosya gönderimi ve eski mesaj sayfalaması bu sürümde yoktur.
+- Sohbet son 60 mesajı gösterir. Eski mesajlar veritabanından silinmez. Fotoğraf/ses desteği vardır; genel dosya eki, push bildirim ve eski mesaj sayfalaması yoktur.
 - Ayrılınca üyelik ve ortak durum silinir, eski mesajlar odada kalır. Oda adını değiştirme, oda silme ve başka üyeyi çıkarma bu sürümde yoktur.
 
 ## Veri ve erişim modeli

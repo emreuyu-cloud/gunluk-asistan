@@ -1,5 +1,17 @@
 # Doğrulama — 20 Ekim 2026
 
+## Profil ve medya güncellemesi — 21 Ekim 2026
+
+- Güncel erişim kuralları: **11/11 geçti**. Özel profil, üyelikte fotoğraf/ad güncellemesi, eklerin atomik yazılması, üye olmayan erişimi, MIME/boyut/süre sınırları ve ayrılma sonrası erişim denetlendi.
+- `npm run test:media`: iki emülatör hesabıyla profil fotoğrafı yükleme/kaldırma, kalıcılık, odalara yansıma, fotoğraf gönderme ve karşı tarafta açma geçti.
+- Sentetik mikrofonla gerçek MediaRecorder kaydı, önizleme, karşı hesapta oynatma, 30 saniyede otomatik durdurma, kapanış/iptal/izin reddi ve geç sonuçlanan izin isteğinde mikrofon temizliği geçti.
+- 320/390/768 px medya ekranları, yanlış dosya türü ve çevrimdışı gönderim hatası doğrulandı. Sayfa hatası: 0.
+- Önceki ekip testleri ve 32 kişisel görünüm kombinasyonu yeniden geçti. Kişisel test saati gece yarısı kaynaklı tarih değişiminden bağımsız olacak şekilde sabitlendi.
+- Üretim hesabına test fotoğrafı/sesi gönderilmedi, gerçek mikrofon kaydedilmedi. Fiziksel iPhone/Android testi henüz yapılmadı.
+- Kullanım ve veri sınırları: `PROFIL-MEDYA.md`.
+
+Aşağıdaki rapor önceki tasarım ve ekip sürümünün doğrulamasıdır.
+
 Ortam: Windows, headless Microsoft Edge/Chromium, Playwright 1.62.1, Auth ve Firestore emülatörleri (`demo-gunluk`). Gerçek üretim hesabına/veritabanına test verisi yazılmadı.
 
 ## Erişim kuralları: 9/9 geçti

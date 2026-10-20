@@ -3,6 +3,7 @@
   'use strict';
   const FB = 'https://www.gstatic.com/firebasejs/13.0.0/';
   let mods = null, auth = null, user = null, pushTimer = null, pushGen = 0, syncing = null, redirectChecked = false;
+  let profile = null, profileUnsub = null;
 
   function configReady(cfg) {
     if (!cfg || typeof cfg !== 'object') return false;
@@ -78,7 +79,13 @@
     }
     mods = { authMod, fs, db };
     authMod.onAuthStateChanged(auth, u => {
+      profileUnsub?.(); profileUnsub = null; profile = null;
       user = u || null;
+      if (u) profileUnsub = fs.onSnapshot(fs.doc(db,'users',u.uid,'data','profile'), snap => {
+        if (user?.uid !== u.uid) return;
+        profile = snap.exists() ? snap.data() : null;
+        window.dispatchEvent(new Event('ga:profile'));
+      }, () => {});
       window.dispatchEvent(new CustomEvent('ga:auth', { detail: user }));
       if (!u) { remember(null); statusLine(null); return; }
       statusLine(u, 'eşitleniyor');
@@ -212,6 +219,7 @@
     });
   }
   function sheetSignedIn() {
+    if (window.GAProfile) return GAProfile.open();
     const email = esc(user && user.email ? user.email : 'Hesap');
     App.openSheet(`<h3>Hesap</h3>
       <div class="group"><div class="cell"><div class="cell-main">${email}<div class="cell-sub">Vardiya, izin, mola ve alarm bu hesapla eşitlenir</div></div></div></div>
@@ -272,6 +280,7 @@
   setInterval(() => { if (!document.hidden) pull(); }, 60000);
 
   window.GAAccount = { open, bootIfNeeded, push, wipe, ready: true,
+    profile() { return profile || {name:user?.displayName || (user && App.store.get('teamName:'+user.uid,'')) || '',avatar:''}; },
     async connection() { await ensureFirebase(); return mods ? { ...mods, user } : null; }
   };
   if (window.__gaAccountOpen) open();

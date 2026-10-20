@@ -7,6 +7,16 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
     function validName(name, max) { return name is string && name.size() > 0 && name.size() <= max; }
+    function validAvatar(value) {
+      return value is string && value.size() <= 30000
+        && (value == '' || value.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'));
+    }
+    function validMedia(d) {
+      return d.size is int && d.size > 0 && d.size <= 300000
+        && d.duration is int
+        && ((d.kind == 'image' && d.mime == 'image/jpeg' && d.duration == 0)
+          || (d.kind == 'audio' && d.mime in ['audio/mp4','audio/webm','audio/ogg'] && d.duration > 0 && d.duration <= 30));
+    }
     function validPresence(d) {
       return d.state in ['ready', 'break', 'returning']
         && d.breakStartedAt is int && d.breakEndsAt is int
@@ -21,7 +31,11 @@ service cloud.firestore {
         && invite.roomId == roomId && invite.expiresAt > request.time;
     }
     match /users/{uid}/data/{document} {
-      allow read, write: if self(uid);
+      allow read, delete: if self(uid);
+      allow create, update: if self(uid) && (document != 'profile'
+        || (request.resource.data.keys().hasOnly(['name','avatar','updatedAt'])
+          && validName(request.resource.data.name,40) && validAvatar(request.resource.data.avatar)
+          && request.resource.data.updatedAt == request.time));
     }
     match /users/{uid}/rooms/{roomId} {
       allow read, delete: if self(uid);
@@ -42,29 +56,54 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if member(roomId);
         allow create: if self(uid)
-          && request.resource.data.keys().hasOnly(['name','uid','joinToken','joinedAt','updatedAt','state','breakStartedAt','breakEndsAt'])
+          && request.resource.data.keys().hasOnly(['name','avatar','uid','joinToken','joinedAt','updatedAt','state','breakStartedAt','breakEndsAt'])
           && request.resource.data.uid == uid
           && validName(request.resource.data.name,40)
+          && validAvatar(request.resource.data.get('avatar',''))
           && validPresence(request.resource.data)
           && request.resource.data.joinedAt == request.time
           && ((!exists(/databases/$(database)/documents/rooms/$(roomId))
                && getAfter(/databases/$(database)/documents/rooms/$(roomId)).data.createdBy == uid
                && request.resource.data.joinToken == '')
             || validInvite(roomId, request.resource.data.joinToken));
-        allow update: if self(uid)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','breakStartedAt','breakEndsAt','updatedAt'])
-          && validPresence(request.resource.data);
+        allow update: if self(uid) && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','breakStartedAt','breakEndsAt','updatedAt']) && validPresence(request.resource.data))
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','avatar'])
+            && validName(request.resource.data.name,40) && validAvatar(request.resource.data.avatar)
+            && request.resource.data.name == get(/databases/$(database)/documents/users/$(uid)/data/profile).data.name
+            && request.resource.data.avatar == get(/databases/$(database)/documents/users/$(uid)/data/profile).data.avatar));
         allow delete: if self(uid);
       }
       match /messages/{messageId} {
         allow read: if member(roomId);
         allow create: if member(roomId)
-          && request.resource.data.keys().hasOnly(['uid','name','text','createdAt'])
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.name == get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)).data.name
-          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
-          && request.resource.data.createdAt == request.time;
-        allow delete: if member(roomId) && resource.data.uid == request.auth.uid;
+          && request.resource.data.createdAt == request.time
+          && ((request.resource.data.keys().hasOnly(['uid','name','text','createdAt'])
+              && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000)
+            || (request.resource.data.keys().hasOnly(['uid','name','kind','mime','size','duration','attachmentId','createdAt'])
+              && validMedia(request.resource.data) && request.resource.data.attachmentId == messageId
+              && getAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)).data.uid == request.auth.uid
+              && getAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)).data.kind == request.resource.data.kind
+              && getAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)).data.mime == request.resource.data.mime
+              && getAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)).data.size == request.resource.data.size
+              && getAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)).data.duration == request.resource.data.duration));
+        allow delete: if member(roomId) && resource.data.uid == request.auth.uid
+          && (!('attachmentId' in resource.data) || !existsAfter(/databases/$(database)/documents/rooms/$(roomId)/attachments/$(messageId)));
+      }
+      match /attachments/{messageId} {
+        allow get: if member(roomId);
+        allow create: if member(roomId)
+          && request.resource.data.keys().hasOnly(['uid','kind','mime','size','duration','data','createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.createdAt == request.time && validMedia(request.resource.data)
+          && request.resource.data.data is bytes && request.resource.data.data.size() == request.resource.data.size
+          && getAfter(/databases/$(database)/documents/rooms/$(roomId)/messages/$(messageId)).data.uid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/rooms/$(roomId)/messages/$(messageId)).data.attachmentId == messageId
+          && getAfter(/databases/$(database)/documents/rooms/$(roomId)/messages/$(messageId)).data.createdAt == request.time;
+        allow delete: if member(roomId) && resource.data.uid == request.auth.uid
+          && !existsAfter(/databases/$(database)/documents/rooms/$(roomId)/messages/$(messageId));
       }
     }
     match /invites/{token} {
