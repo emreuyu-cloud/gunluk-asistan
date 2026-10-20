@@ -48,6 +48,19 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { toast('Kaydedilemedi'); return false; } }
   };
+  let appearance = store.get('appearance', 'system');
+  if (!['system', 'light', 'dark'].includes(appearance)) appearance = 'system';
+  function applyAppearance() {
+    if (appearance === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = appearance;
+    const dark = appearance === 'dark' || (appearance === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.querySelectorAll('meta[name="theme-color"]').forEach(el => {
+      el.content = dark ? '#101722' : '#f3f5f9';
+    });
+  }
+  function pageHeader(title, subtitle) {
+    return `<header class="page-header"><p class="eyebrow">Günlük Asistan</p><h1 class="large-title">${title}</h1><p class="subtitle">${subtitle}</p></header>`;
+  }
   const $ = (s, r = document) => r.querySelector(s);
   const pad = n => String(n).padStart(2, '0');
   const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -86,8 +99,25 @@
     toast._t = setTimeout(() => el.classList.remove('on', 'act'), opt && opt.action ? 5000 : 1800);
   }
   function haptic() { try { navigator.vibrate && navigator.vibrate(10); } catch (e) {} }
-  function openSheet(html, onMount) { const s = $('#sheet'); s.style.transform = ''; $('#sheet-body').innerHTML = html; s.classList.add('on'); $('#sheet-backdrop').classList.add('on'); s.scrollTop = 0; onMount && onMount($('#sheet-body')); }
-  function closeSheet() { const s = $('#sheet'); s.style.transform = ''; s.classList.remove('on', 'drag'); $('#sheet-backdrop').classList.remove('on'); }
+  let sheetReturnFocus = null;
+  function openSheet(html, onMount) {
+    const s = $('#sheet');
+    if (!sheetOpen()) sheetReturnFocus = document.activeElement;
+    s.style.transform = ''; $('#sheet-body').innerHTML = html;
+    const title = $('#sheet-body h3');
+    if (title) { title.id = 'sheet-title'; s.setAttribute('aria-labelledby', title.id); }
+    else s.removeAttribute('aria-labelledby');
+    s.inert = false; s.classList.add('on'); $('#sheet-backdrop').classList.add('on'); s.scrollTop = 0;
+    $('#screens').inert = true; $('#tabbar').inert = true;
+    onMount && onMount($('#sheet-body'));
+    $('.sheet-close').focus({ preventScroll: true });
+  }
+  function closeSheet() {
+    const s = $('#sheet'); s.style.transform = ''; s.classList.remove('on', 'drag'); s.inert = true;
+    $('#sheet-backdrop').classList.remove('on'); $('#screens').inert = false; $('#tabbar').inert = false;
+    const target = sheetReturnFocus && sheetReturnFocus.isConnected ? sheetReturnFocus : $('#tabbar button.active');
+    target && target.focus({ preventScroll: true });
+  }
   // iOS tarzı onay (eylem) sayfası; tarayıcı onay kutusu yerine
   function confirmSheet(title, msg, okLabel, onOk, danger = true) {
     openSheet(`<h3>${esc(title)}</h3><div class="section-foot" style="margin:0 8px 18px;text-align:center">${esc(msg)}</div>
@@ -149,6 +179,7 @@
     store.set('settings', S); store.set('overrides', overrides); store.set('breaks', breaks); store.set('activeBreak', active); store.set('alarm', alarm);
     touchSync();
     scheduleAlarm();
+    window.dispatchEvent(new Event('ga:breakchange'));
   };
 
   function shiftType(dateStr) {
@@ -281,7 +312,7 @@
   }
   async function toggleAlarm() {
     haptic();
-    if (alarm.on) { setAlarmOn(false); renderAll(); return toast('Alarm kapalı'); }
+    if (alarm.on) { setAlarmOn(false); renderAll(); return toast('Uygulama uyarısı kapalı. Telefon alarmı Saat uygulamasından kapatılır.'); }
     unlockAudio();
     let perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
     if (perm === 'default') {
@@ -289,9 +320,9 @@
     }
     setAlarmOn(true, true);
     renderAll();
-    if (perm === 'granted') toast('Alarm açık');
+    if (perm === 'granted') toast('Uygulama içi uyarı açık');
     else if (perm === 'denied') toast('Bildirim izni yok. Uygulama açıkken ses çalar.');
-    else toast('Alarm açık. Bu cihazda bildirim kısıtlı olabilir.');
+    else toast('Uygulama içi uyarı açık. Bildirim desteği kısıtlı olabilir.');
   }
   // Mola hangi güne sayılır: vardiya içindeyse vardiyanın başladığı gün (gece vardiyası gece yarısında bölünmez)
   function shiftDay(ts) {
@@ -350,16 +381,17 @@
     const nx = nextAlarm(now);
     const when = nx ? dayLabel(nx.at, now) + ' ' + hm(nx.at) + ' · ' + nx.type : 'Önümüzdeki günlerde vardiya yok';
     const perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
-    let sub = 'Kapalı. Açılınca her vardiyadan 2 saat önce çalar.';
+    let sub = 'Uygulama açıkken, vardiyadan 2 saat önce uyarır.';
     if (alarm.on) sub = 'Sonraki: ' + when + (perm === 'denied' ? ' · bildirim izni yok' : '');
     return `<div class="section-title">Alarm</div>
       <div class="group">
         <div class="cell"><div class="dot" style="background:var(--red)">${ICON.bell}</div>
-          <div class="cell-main">Alarm<div class="cell-sub">${esc(sub)}</div></div>
+          <div class="cell-main">Uygulama içi uyarı<div class="cell-sub">${esc(sub)}</div></div>
           <button type="button" class="switch ${alarm.on ? 'on' : ''}" data-act="alarm" role="switch" aria-checked="${alarm.on ? 'true' : 'false'}" aria-label="Alarm"><i></i></button></div>
-        ${alarm.on ? `<div class="cell tap" data-act="alarm-ics" role="button"><div class="cell-main">Takvime ekle<div class="cell-sub">Kilitliyken çalması için telefon takvimi</div></div></div>` : ''}
+        <div tabindex="0" class="cell tap chev" data-act="phone-alarm" role="button"><div class="dot" style="background:var(--accent)">${ICON.clock}</div><div class="cell-main">Telefonda alarm kur<div class="cell-sub">${nx ? esc(when) : 'Önce vardiya düzenini ayarla'}</div></div></div>
+        <div tabindex="0" class="cell tap" data-act="alarm-ics" role="button"><div class="cell-main">Takvim hatırlatıcısı<div class="cell-sub">Vardiyaları telefon takvimine ekle</div></div></div>
       </div>
-      <div class="section-foot">Uygulama açıkken bildirim ve kısa bir ses çalar. iPhone kilitliyken veya uygulama kapalıyken web alarmı çalmaz.</div>`;
+      <div class="section-foot">Kilitli ekranda çalması için “Telefonda alarm kur” adımlarını tamamla. Üstteki anahtar yalnız uygulama içi uyarıyı yönetir.</div>`;
   }
   function renderBugun() {
     const now = new Date(), today = ymd(now), h = now.getHours();
@@ -388,15 +420,14 @@
         <div class="cell-detail">${s.type ? (s.start ? s.type + ' · ' + s.b + '-' + s.e : 'İzin') : '-'}</div></div>`;
     }
     $('#screen-bugun').innerHTML = `
-      <img class="brand-mark" src="icons/icon-180.png" alt="TGS" width="36" height="36">
-      <div class="subtitle" style="margin:8px 0 0">${longDate(now)}</div>
-      <h1 class="large-title" style="margin-top:2px">${greet}</h1>
+      <div class="brand-row"><img class="brand-mark" src="icons/icon-180.png" alt="TGS" width="30" height="30"><span>Günlük Asistan</span></div>
+      <header class="page-header"><h1 class="large-title">${greet}</h1><p class="subtitle">${longDate(now)}</p></header>
       ${hero}
       <div class="tiles">
         <div class="tile"><div class="k">Bugünkü mola</div><div class="v">${dur(used / 6e4)}</div></div>
         <div class="tile"><div class="k">${used > allow ? 'Aşılan süre' : 'Kalan mola'}</div><div class="v" style="color:${used > allow ? 'var(--red)' : 'var(--green)'}">${dur(Math.abs(allow - used) / 6e4)}</div></div>
       </div>
-      <div style="margin-top:10px"><button class="btn ${active ? 'danger' : 'green'}" data-act="break">${active ? ICON.stop + ' Molayı bitir · ' + mmss(Date.now() - active) : ICON.play + ' Molaya başla'}</button></div>
+      <div class="quick-action"><button class="btn ${active ? 'danger' : 'green'}" data-act="break">${active ? ICON.stop + ' Molayı bitir · ' + mmss(Date.now() - active) : ICON.play + ' Molaya başla'}</button></div>
       ${alarmCard(now)}
       ${upcomingHtml(now)}
       <div class="section-title">Önümüzdeki 7 gün</div><div class="group">${week}</div>`;
@@ -410,14 +441,14 @@
     for (let i = 0; i < 42; i++) {
       const d = new Date(y, m, 1 - startOff + i), ds = ymd(d), t = shiftType(ds);
       if (i >= 35 && d.getMonth() !== m) break;
-      cells += `<div class="cal-day ${d.getMonth() !== m ? 'out' : ''} ${ds === today ? 'today' : ''}" data-day="${ds}"><span>${d.getDate()}</span><i class="${t ? 'c-' + t : ''}"></i></div>`;
+      cells += `<button type="button" class="cal-day ${d.getMonth() !== m ? 'out' : ''} ${ds === today ? 'today' : ''}" data-day="${ds}" aria-label="${longDate(d)} ${d.getFullYear()}, ${t || 'vardiya yok'}" ${ds === today ? 'aria-current="date"' : ''}><span>${d.getDate()}</span><i aria-hidden="true" class="${t ? 'c-' + t : ''}"></i></button>`;
     }
     let work = 0, min = 0, off = 0, cnt = { Sabah: 0, Akşam: 0, Gece: 0 };
     for (let d = 1; d <= days; d++) { const sp = shiftSpan(ymd(new Date(y, m, d))); if (sp.start) { work++; min += sp.min; cnt[sp.type]++; } else if (sp.type === 'İzin') off++; }
     const r = S.rotation;
     const rotTxt = r && r.seq && r.seq.length ? compress(r.seq) : 'Ayarlanmadı';
     $('#screen-vardiya').innerHTML = `
-      <h1 class="large-title">Vardiya</h1>
+      ${pageHeader('Vardiya', 'Çalışma günlerin, bir bakışta.')}
       <div class="cal">
         <div class="cal-head" style="padding:4px 8px 6px"><h3>${MONTHS[m]} ${y}</h3>
           <div class="row" style="flex:none;gap:8px"><button class="icon-btn" data-act="prev" aria-label="Önceki ay">${ICON.left}</button><button class="icon-btn" data-act="next" aria-label="Sonraki ay">${ICON.right}</button></div></div>
@@ -426,7 +457,7 @@
       </div>
       <div class="section-foot" style="text-align:center">Bir güne dokunarak o günü tek seferlik değiştirebilirsin.</div>
       <div class="section-title">Dönen düzen</div>
-      <div class="group"><div class="cell tap chev" data-act="rotation"><div class="dot" style="background:var(--accent)">${ICON.repeat}</div>
+      <div class="group"><div role="button" tabindex="0" class="cell tap chev" data-act="rotation"><div class="dot" style="background:var(--accent)">${ICON.repeat}</div>
         <div class="cell-main">Vardiya düzeni<div class="cell-sub">${esc(rotTxt)}</div></div></div></div>
       <div class="section-title">${MONTHS[m]} özeti</div>
       <div class="tiles" style="margin-top:0">
@@ -434,6 +465,11 @@
         <div class="tile"><div class="k">Çalışma günü</div><div class="v">${work}</div></div>
         <div class="tile"><div class="k">İzin günü</div><div class="v">${off}</div></div>
         <div class="tile"><div class="k">Sabah / Akşam / Gece</div><div class="v">${cnt.Sabah} / ${cnt.Akşam} / ${cnt.Gece}</div></div>
+      </div>
+      <div class="distribution" role="img" aria-label="${MONTHS[m]} vardiya dağılımı: ${cnt.Sabah} sabah, ${cnt.Akşam} akşam, ${cnt.Gece} gece, ${off} izin günü">
+        <div class="cell-sub">Ayın dağılımı</div>
+        <div class="distribution-bar" aria-hidden="true">${TYPES.map(t => `<i class="c-${t}" style="flex:${t === 'İzin' ? off : cnt[t]}"></i>`).join('')}</div>
+        <div class="distribution-labels" aria-hidden="true">${TYPES.map(t => `<span><strong>${t === 'İzin' ? off : cnt[t]}</strong>${t}</span>`).join('')}</div>
       </div>`;
   }
   function compress(seq) {
@@ -495,12 +531,12 @@
       if (t > 0) hist += `<div class="cell"><div class="cell-main">${WD_LONG[d.getDay()]}<div class="cell-sub">${d.getDate()} ${MONTHS[d.getMonth()]}</div></div><div class="cell-detail" style="${t > allow ? 'color:var(--red)' : ''}">${dur(t / 6e4)}</div></div>`;
     }
     $('#screen-mola').innerHTML = `
-      <h1 class="large-title">Mola</h1>
-      <div style="text-align:center;min-height:26px">${active ? `<span class="pill live">Moladasın · ${hm(active)}'den beri</span>` : ''}</div>
+      ${pageHeader('Bir nefes al.', 'Mola süren ve gün içindeki dengen.')}
+      <div style="text-align:center;min-height:26px">${active ? `<span class="pill live">Moladasın · ${hm(active)}'den beri</span>` : '<span class="cell-sub">Kendine ayırdığın zaman</span>'}</div>
       <div class="ring-wrap"><svg viewBox="0 0 240 240" aria-hidden="true"><circle class="ring-bg" cx="120" cy="120" r="104" fill="none"/>
         <circle class="ring-fg" id="ringfg" cx="120" cy="120" r="104" fill="none" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}" style="stroke:${over ? 'var(--red)' : frac > .8 ? 'var(--orange)' : 'var(--green)'}"/></svg>
-        <div class="ring-center"><div class="time" id="ringtime">${active ? mmss(Date.now() - active) : mmss(over ? used - allow : allow - used)}</div>
-        <div class="cap">${active ? 'bu mola' : over ? 'hakkı aştın' : 'kalan mola hakkı'}</div></div></div>
+        <button type="button" class="ring-center" data-act="break-options" aria-label="Mola süresini seç"><span class="time" id="ringtime">${active ? mmss(Date.now() - active) : mmss(over ? used - allow : allow - used)}</span>
+        <span class="cap">${active ? 'bu mola' : over ? 'hakkı aştın' : 'kalan mola hakkı'}</span><span class="ring-hint">Süreyi seç ${ICON.right}</span></button></div>
       <button class="btn ${active ? 'danger' : 'green'}" data-act="break">${active ? ICON.stop + ' Molayı bitir' : ICON.play + ' Molaya başla'}</button>
       <div class="tiles">
         <div class="tile"><div class="k">Bugün toplam</div><div class="v">${dur(used / 6e4)}</div></div>
@@ -508,12 +544,20 @@
       </div>
       <div class="section-title">Bugünkü molalar</div>
       <div class="group">${(active ? `<div class="cell"><div class="dot" style="background:var(--green)">${ICON.coffee}</div><div class="cell-main">${hm(active)} - şimdi</div><div class="cell-detail">sürüyor</div></div>` : '') +
-        (list.map(x => `<div class="cell tap chev" data-brk="${x.b}" role="button" aria-label="${hm(x.b)} - ${hm(x.s)} molasını düzenle"><div class="dot" style="background:var(--teal)">${ICON.coffee}</div><div class="cell-main">${hm(x.b)} - ${hm(x.s)}</div><div class="cell-detail">${dur((x.s - x.b) / 6e4)}</div></div>`).join('') ||
+        (list.map(x => `<div tabindex="0" class="cell tap chev" data-brk="${x.b}" role="button" aria-label="${hm(x.b)} - ${hm(x.s)} molasını düzenle"><div class="dot" style="background:var(--teal)">${ICON.coffee}</div><div class="cell-main">${hm(x.b)} - ${hm(x.s)}</div><div class="cell-detail">${dur((x.s - x.b) / 6e4)}</div></div>`).join('') ||
         (active ? '' : '<div class="empty" style="padding:18px 16px">Bugün henüz mola vermedin.</div>')) +
-        `<div class="cell tap" data-act="addBreak" role="button"><div class="cell-main" style="color:var(--accent)">+ Mola ekle</div></div>`}</div>
+        `<div tabindex="0" class="cell tap" data-act="addBreak" role="button"><div class="cell-main" style="color:var(--accent)">+ Mola ekle</div></div>`}</div>
       <div class="section-foot">Unuttuğun molayı ekleyebilir, bir molaya dokunup düzeltebilirsin. Gece vardiyasındaki molalar vardiyanın başladığı güne sayılır.</div>
       ${hist ? `<div class="section-title">Son günler</div><div class="group">${hist}</div>` : ''}
       ${list.length ? `<div style="margin-top:16px"><button class="btn plain danger" data-act="clearToday">Bugünün molalarını sil</button></div>` : ''}`;
+  }
+  function breakOptions() {
+    const options = [[15,'15 dk'],[30,'30 dk'],[45,'45 dk'],[60,'1 saat'],[90,'1 saat 30 dk'],[120,'2 saat']];
+    openSheet(`<h3>Mola süren</h3><p class="section-foot" style="margin:0 0 20px;text-align:center">Günlük mola hakkını seç. Kullandığın süre ve devam eden molan korunur.</p><div class="break-options">${options.map(([min,label]) => `<button type="button" class="duration-option" data-minutes="${min}" aria-pressed="${S.breakMin === min}"><span>${label}</span>${S.breakMin === min ? '<span class="duration-check" aria-hidden="true">✓</span>' : ''}</button>`).join('')}</div>`, root => {
+      root.querySelectorAll('[data-minutes]').forEach(button => button.onclick = () => {
+        S.breakMin = Number(button.dataset.minutes); save(); haptic(); closeSheet(); renderAll(); toast('Günlük mola hakkı: ' + dur(S.breakMin));
+      });
+    });
   }
   function breakSheet(orig) {
     const now = Date.now();
@@ -675,31 +719,34 @@
     const lbDays = lb ? Math.floor((Date.now() - lb) / 864e5) : -1;
     const lbTxt = lb ? 'Son yedek: ' + (lbDays <= 0 ? 'bugün' : lbDays + ' gün önce') : 'Henüz yedek alınmadı';
     $('#screen-ayarlar').innerHTML = `
-      <h1 class="large-title">Ayarlar</h1>
+      ${pageHeader('Ayarlar', 'Gününü kendi düzenine göre ayarla.')}
+      <div class="section-title">Görünüm</div>
+      <div class="theme-picker" role="group" aria-label="Görünüm teması">${[['system','Otomatik'],['light','Açık'],['dark','Koyu']].map(([value,label]) => `<button type="button" data-theme-choice="${value}" aria-pressed="${appearance === value}">${label}</button>`).join('')}</div>
+      <div class="section-foot">Otomatik görünüm, cihazının açık veya koyu temasını izler.</div>
       <div class="section-title" style="margin-top:8px">Vardiya saatleri</div>
       <div class="group">${['Sabah', 'Akşam', 'Gece'].map(k => `<div class="cell"><div class="dot c-${k}">${ICON[k]}</div><div class="cell-main">${k}<div class="time-pair"><input type="time" data-time="${k}-0" value="${t[k][0]}" aria-label="${k} başlangıç"><span class="cell-detail">-</span><input type="time" data-time="${k}-1" value="${t[k][1]}" aria-label="${k} bitiş"></div></div></div>`).join('')}</div>
       <div class="section-foot">Bitiş başlangıçtan önceyse vardiya ertesi güne geçer, örneğin 22:30 - 06:30.</div>
       <div class="section-title">Mola ve yol</div>
-      <div class="group"><div class="cell"><div class="dot" style="background:var(--green)">${ICON.clock}</div><div class="cell-main">Günlük mola hakkı</div>
+      <div class="group"><div class="cell stepper-cell"><div class="dot" style="background:var(--green)">${ICON.clock}</div><div class="cell-main">Günlük mola hakkı</div>
         <button class="icon-btn" data-act="bm-" aria-label="Mola hakkını azalt">−</button><span style="min-width:62px;text-align:center;font-variant-numeric:tabular-nums">${S.breakMin} dk</span><button class="icon-btn" data-act="bm+" aria-label="Mola hakkını artır">+</button></div>
-        <div class="cell"><div class="dot" style="background:var(--indigo)">${ICON.car}</div><div class="cell-main">Yol süresi</div>
+        <div class="cell stepper-cell"><div class="dot" style="background:var(--indigo)">${ICON.car}</div><div class="cell-main">Yol süresi</div>
         <button class="icon-btn" data-act="cm-" aria-label="Yol süresini azalt">−</button><span style="min-width:62px;text-align:center;font-variant-numeric:tabular-nums">${S.commuteMin} dk</span><button class="icon-btn" data-act="cm+" aria-label="Yol süresini artır">+</button></div></div>
       <div class="section-foot">Yol süresi, Bugün ekranındaki "…'te çık" saatini hesaplar.</div>
       <div class="section-title">Takvim</div>
-      <div class="group"><div class="cell tap chev" data-act="ics" role="button"><div class="dot" style="background:var(--red)">${ICON.cal}</div><div class="cell-main">Takvime aktar (.ics)<div class="cell-sub">Önümüzdeki 60 günün vardiyaları</div></div></div></div>
+      <div class="group"><div tabindex="0" class="cell tap chev" data-act="ics" role="button"><div class="dot" style="background:var(--red)">${ICON.cal}</div><div class="cell-main">Takvime aktar (.ics)<div class="cell-sub">Önümüzdeki 60 günün vardiyaları</div></div></div></div>
       <div class="section-foot">Dosyayı iPhone Takvim'e ekleyince her vardiyadan 1 saat önce hatırlatma gelir. Düzenin değişirse yeniden aktar.</div>
       <div class="section-title">Veriler</div>
       <div class="group">
-        <div class="cell tap" data-act="export" role="button"><div class="dot" style="background:var(--accent)">${ICON.share}</div><div class="cell-main">Yedek al<div class="cell-sub">${lbTxt}</div></div></div>
-        <div class="cell tap" data-act="restore" role="button"><div class="dot" style="background:var(--teal)">${ICON.up}</div><div class="cell-main">Yedeği geri yükle</div></div>
-        <div class="cell tap" data-act="reset" role="button"><div class="dot" style="background:var(--red)">${ICON.trash}</div><div class="cell-main" style="color:var(--red)">Tüm verileri sil</div></div>
+        <div tabindex="0" class="cell tap" data-act="export" role="button"><div class="dot" style="background:var(--accent)">${ICON.share}</div><div class="cell-main">Yedek al<div class="cell-sub">${lbTxt}</div></div></div>
+        <div tabindex="0" class="cell tap" data-act="restore" role="button"><div class="dot" style="background:var(--teal)">${ICON.up}</div><div class="cell-main">Yedeği geri yükle</div></div>
+        <div tabindex="0" class="cell tap" data-act="reset" role="button"><div class="dot" style="background:var(--red)">${ICON.trash}</div><div class="cell-main" style="color:var(--red)">Kişisel verileri sil</div></div>
       </div>
       <input type="file" id="restore-file" accept="application/json,.json" hidden>
       <div class="section-foot">Verilerin bu telefonda durur. Hesaba girince diğer cihazlarla da eşitlenir. Ara sıra yedek alıp Dosyalar'a kaydetmen iyi olur.</div>
       <div class="section-title">Hesap</div>
-      <div class="group"><div class="cell tap chev" data-act="account" role="button"><div class="dot" style="background:var(--accent)">${ICON.user}</div><div class="cell-main">Hesap<div class="cell-sub" id="account-sub">${esc(accountStatusText)}</div></div></div></div>
+      <div class="group"><div tabindex="0" class="cell tap chev" data-act="account" role="button"><div class="dot" style="background:var(--accent)">${ICON.user}</div><div class="cell-main">Hesap<div class="cell-sub" id="account-sub">${esc(accountStatusText)}</div></div></div></div>
       <div class="section-foot">Google veya e-posta ile giriş. Kurulmadıysa uygulama eskisi gibi çalışır.</div>
-      <div class="group" style="margin-top:24px"><div class="cell tap chev" data-act="tetris" role="button"><span class="nayro-logo">${nayroLogo()}</span><div class="cell-main">Tetris modu</div></div></div>
+      <div class="group" style="margin-top:24px"><div tabindex="0" class="cell tap chev" data-act="tetris" role="button"><span class="nayro-logo">${nayroLogo()}</span><div class="cell-main">Tetris modu</div></div></div>
       <div class="empty brand-foot"><img class="brand-mark" src="icons/icon-180.png" alt="" width="44" height="44"><div>Günlük Asistan 4.0<br>Nayro ve nayronayt</div></div>`;
     $('#screen-ayarlar').querySelectorAll('[data-time]').forEach(inp => inp.onchange = () => {
       const [k, i] = inp.dataset.time.split('-');
@@ -723,11 +770,18 @@
   // ---------- olaylar ----------
   function onClick(e) {
     if (e.target.closest('#sheet') || e.target.closest('#toast')) return;
+    const theme = e.target.closest('[data-theme-choice]');
+    if (theme) {
+      appearance = theme.dataset.themeChoice; store.set('appearance', appearance); applyAppearance();
+      document.querySelectorAll('[data-theme-choice]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeChoice === appearance)));
+      return haptic();
+    }
     const day = e.target.closest('[data-day]'); if (day) return daySheet(day.dataset.day);
     const bk = e.target.closest('[data-brk]'); if (bk) { const o = breaks.find(x => x.b === +bk.dataset.brk); return o && breakSheet(o); }
     const a = e.target.closest('[data-act]'); if (!a) return;
     switch (a.dataset.act) {
       case 'break': return toggleBreak();
+      case 'break-options': return breakOptions();
       case 'prev': calMonth.setMonth(calMonth.getMonth() - 1); haptic(); return renderVardiya();
       case 'next': calMonth.setMonth(calMonth.getMonth() + 1); haptic(); return renderVardiya();
       case 'rotation': return rotationSheet();
@@ -743,10 +797,11 @@
       case 'restore': return $('#restore-file').click();
       case 'ics': return exportIcs();
       case 'alarm': return toggleAlarm();
+      case 'phone-alarm': return GAPhoneAlarm.open();
       case 'alarm-ics': return exportAlarmIcs();
       case 'account': return loadAccount(true);
       case 'tetris': return openTetris();
-      case 'reset': return confirmSheet('Tüm veriler silinsin mi?', 'Vardiya düzeni, gün değişiklikleri ve mola kayıtlarının hepsi silinir. Bu geri alınamaz.', 'Tüm verileri sil', () => {
+      case 'reset': return confirmSheet('Kişisel veriler silinsin mi?', 'Vardiya düzeni, gün değişiklikleri ve mola kayıtların silinir. Ekip üyeliklerin ve gönderdiğin mesajlar kalır. Bu geri alınamaz.', 'Kişisel verileri sil', () => {
         const done = () => { localStorage.clear(); location.reload(); };
         if (window.GAAccount && GAAccount.wipe) GAAccount.wipe().then(done, done);
         else done();
@@ -814,6 +869,7 @@
     } finally { applyingRemote = false; }
     scheduleAlarm();
     renderAll();
+    window.dispatchEvent(new Event('ga:breakchange'));
   }
   function loadAccount(open) {
     if (open) window.__gaAccountOpen = true;
@@ -827,6 +883,7 @@
   }
 
   function show(name) {
+    if (name === 'ekip') loadGroups();
     document.querySelectorAll('.screen').forEach(s => {
       const on = s.id === 'screen-' + name;
       s.classList.toggle('active', on);
@@ -838,6 +895,21 @@
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     store.set('lastTab', name);
+  }
+  function loadGroups() {
+    if (window.GAGroups) return GAGroups.open();
+    if (loadGroups.pending) return;
+    loadGroups.pending = true;
+    $('#screen-ekip').innerHTML = pageHeader('Ekip', 'Aynı vardiya, aynı ekip.') + '<div class="empty">Ekip alanı açılıyor…</div>';
+    const s = document.createElement('script'); s.src = 'groups.js';
+    s.onload = () => { loadGroups.pending = false; window.GAGroups && GAGroups.open(); };
+    s.onerror = () => { loadGroups.pending = false; $('#screen-ekip').innerHTML = pageHeader('Ekip', 'Ekip alanı yüklenemedi.') + '<div class="empty">Bağlantını kontrol edip bu sekmeyi tekrar aç.</div>'; s.remove(); };
+    document.body.appendChild(s);
+  }
+  function breakPresence() {
+    const spentBefore = breakTotal(todayKey()) - (active ? Date.now() - active : 0);
+    return { state: active ? 'break' : 'ready', breakStartedAt: active || 0,
+      breakEndsAt: active ? active + Math.max(0, S.breakMin * 6e4 - spentBefore) : 0 };
   }
 
   // Alt sayfayı aşağı sürükleyerek kapatma
@@ -879,15 +951,35 @@
   }
 
   function boot() {
+    applyAppearance();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppearance);
     document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => { haptic(); show(b.dataset.screen); });
     document.addEventListener('click', onClick);
+    window.addEventListener('ga:auth', e => { if (e.detail) loadGroups(); });
+    document.addEventListener('keydown', e => {
+      if (sheetOpen()) {
+        if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }
+        if (e.key === 'Tab') {
+          const items = [...$('#sheet').querySelectorAll('button,input,select,textarea,[tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length);
+          const first = items[0], last = items[items.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      } else if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.cell.tap')) {
+        e.preventDefault(); e.target.click();
+      }
+    });
+    $('.sheet-close').onclick = closeSheet;
     $('#sheet-backdrop').onclick = closeSheet;
     initSheetDrag();
     renderAll();
     try { Object.keys(localStorage).forEach(k => { if (k.indexOf('ceviri.') === 0) localStorage.removeItem(k); }); } catch (e) {}
     try { const p = navigator.storage && navigator.storage.persist && navigator.storage.persist(); p && p.catch && p.catch(() => {}); } catch (e) {}
     const last = store.get('lastTab', 'bugun');
-    show(document.getElementById('screen-' + last) ? last : 'bugun');
+    show(location.hash.startsWith('#invite=') ? 'ekip' : document.getElementById('screen-' + last) ? last : 'bugun');
+    if (location.hash === '#alarm-setup') GAPhoneAlarm.open('android');
+    window.addEventListener('hashchange', () => { if (location.hash === '#alarm-setup') GAPhoneAlarm.open('android'); });
+    window.addEventListener('hashchange', () => { if (location.hash.startsWith('#invite=')) show('ekip'); });
     setInterval(() => {
       if (active) {
         const t = $('#ringtime'); if (t) t.textContent = mmss(Date.now() - active);
@@ -903,13 +995,13 @@
     initUpdates();
     scheduleAlarm();
     try {
-      if (store.get('gaUser', null) || sessionStorage.getItem('ga-auth-redirect') === '1') loadAccount(false);
+      if (store.get('gaUser', null) || sessionStorage.getItem('ga-auth-redirect') === '1') { loadAccount(false); loadGroups(); }
     } catch (e) {}
   }
 
   window.App = {
-    boot, store, toast, haptic, openSheet, closeSheet, shiftType, shiftSpan, show, nayroLogo, openTetris,
-    nextAlarm, dueAlarm, getSyncPayload, applySyncPayload, mergeSync, setAccountStatus,
+    boot, store, toast, haptic, openSheet, closeSheet, shiftType, shiftSpan, show, nayroLogo, openTetris, breakPresence, toggleBreak,
+    nextAlarm, dueAlarm, getSyncPayload, applySyncPayload, mergeSync, setAccountStatus, exportAlarmIcs,
     _setAlarm: on => { setAlarmOn(!!on, false); },
     _tickAlarm(now) {
       if (!alarm.on) return null;

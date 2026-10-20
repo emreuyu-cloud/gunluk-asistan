@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function member(roomId) {
+      return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
+    function validName(name, max) { return name is string && name.size() > 0 && name.size() <= max; }
+    function validPresence(d) {
+      return d.state in ['ready', 'break', 'returning']
+        && d.breakStartedAt is int && d.breakEndsAt is int
+        && d.breakStartedAt >= 0 && d.breakEndsAt >= d.breakStartedAt
+        && d.breakStartedAt <= request.time.toMillis()
+        && d.breakEndsAt <= request.time.toMillis() + 14400000
+        && d.updatedAt == request.time;
+    }
+    function validInvite(roomId, token) {
+      let invite = get(/databases/$(database)/documents/invites/$(token)).data;
+      return token is string && token.matches('^[a-f0-9]{48}$')
+        && invite.roomId == roomId && invite.expiresAt > request.time;
+    }
+    match /users/{uid}/data/{document} {
+      allow read, write: if self(uid);
+    }
+    match /users/{uid}/rooms/{roomId} {
+      allow read, delete: if self(uid);
+      allow create: if self(uid)
+        && request.resource.data.keys().hasOnly(['name','joinedAt'])
+        && request.resource.data.joinedAt == request.time
+        && request.resource.data.name == getAfter(/databases/$(database)/documents/rooms/$(roomId)).data.name
+        && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid));
+    }
+    match /rooms/{roomId} {
+      allow get: if member(roomId);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name','createdBy','createdAt'])
+        && validName(request.resource.data.name,60)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+      match /members/{uid} {
+        allow read: if member(roomId);
+        allow create: if self(uid)
+          && request.resource.data.keys().hasOnly(['name','uid','joinToken','joinedAt','updatedAt','state','breakStartedAt','breakEndsAt'])
+          && request.resource.data.uid == uid
+          && validName(request.resource.data.name,40)
+          && validPresence(request.resource.data)
+          && request.resource.data.joinedAt == request.time
+          && ((!exists(/databases/$(database)/documents/rooms/$(roomId))
+               && getAfter(/databases/$(database)/documents/rooms/$(roomId)).data.createdBy == uid
+               && request.resource.data.joinToken == '')
+            || validInvite(roomId, request.resource.data.joinToken));
+        allow update: if self(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','breakStartedAt','breakEndsAt','updatedAt'])
+          && validPresence(request.resource.data);
+        allow delete: if self(uid);
+      }
+      match /messages/{messageId} {
+        allow read: if member(roomId);
+        allow create: if member(roomId)
+          && request.resource.data.keys().hasOnly(['uid','name','text','createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.name == get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)).data.name
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt == request.time;
+        allow delete: if member(roomId) && resource.data.uid == request.auth.uid;
+      }
+    }
+    match /invites/{token} {
+      // A random 192-bit URL is the invitation capability. Never allow listing.
+      allow get: if signedIn();
+      allow create: if signedIn() && token.matches('^[a-f0-9]{48}$')
+        && request.resource.data.keys().hasOnly(['roomId','name','createdBy','createdAt','expiresAt'])
+        && member(request.resource.data.roomId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.name == get(/databases/$(database)/documents/rooms/$(request.resource.data.roomId)).data.name
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(8, 'd');
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+  }
+}

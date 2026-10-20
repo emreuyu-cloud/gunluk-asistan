@@ -1,5 +1,7 @@
 # Hesap kurulumu
 
+> Güncel durum: `firebase-config.js` doldurulmuş; mevcut Google/e-posta entegrasyonu korunuyor. Yeni ekip sürümü için `KURULUM-EKIP.md` ve `firestore.rules` dosyalarını kullanın. Aşağıdaki eski kişisel veri kuralları tek başına ekip odalarını etkinleştirmez.
+
 Hesap özelliği Firebase ile çalışır. `firebase-config.js` boşken uygulama **Hesap özelliği henüz kurulmadı** der; vardiya, mola, takvim ve alarm eskisi gibi durur. Aşağıdaki adımlar bir kez yapılır.
 
 ## 1. Firebase projesi

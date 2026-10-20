@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.gunlukasistan.alarmbridge" android:versionCode="1" android:versionName="1.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+  <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+  <queries><intent><action android:name="android.intent.action.SET_ALARM" /></intent></queries>
+  <application android:label="Günlük Alarm" android:icon="@android:drawable/ic_lock_idle_alarm" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
+    <activity android:name=".AlarmActivity" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+      <intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="gunlukasistan" android:host="alarm" /></intent-filter>
+    </activity>
+  </application>
+</manifest>

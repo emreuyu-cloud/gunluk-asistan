@@ -1,19 +1,65 @@
-# Günlük Asistan 3.0 - uçtan uca test (nayronayt)
+# Doğrulama — 20 Ekim 2026
 
-Ortam: yerel sunucu (http://localhost), headless Chrome, iPhone boyutu 390x844 ve iPhone SE 320x568, açık ve koyu tema. Gerçek iPhone/Safari'de değil; Safari'ye özgü davranışlar (ana ekrana ekleme, 24 saat biçimi) yayından sonra telefonda doğrulanmalı.
+Ortam: Windows, headless Microsoft Edge/Chromium, Playwright 1.62.1, Auth ve Firestore emülatörleri (`demo-gunluk`). Gerçek üretim hesabına/veritabanına test verisi yazılmadı.
 
-## Geçti
-- Beş sekme açılıyor, sayfa hatası yok; tek konsol hatası eksik `favicon.ico` (zararsız).
-- Servis çalışanı kaydoluyor; internet kapalıyken uygulama yeniden açılıyor, beş sekme yerinde.
-- Mola: başlat, sayaç ilerliyor (00:02), bitir; kayıtlar localStorage'da kalıyor.
-- Vardiya: dönen düzen sayfası açılıyor; örnek veriyle takvim renkleri, ay özeti, Bugün kartı ve önümüzdeki 7 gün doğru.
-- Çeviri: hazır kalıba dokununca Türkçesi geliyor; çevrimiçi çeviri MyMemory yedeğiyle çalıştı ("Can you help me?" -> "Bana yardım eder misiniz?"); internetsiz kayıtlı kalıp çevirisi çalıştı.
-- Yeniden yüklemede son açık sekme hatırlanıyor.
-- Koyu tema ve 320px genişlikte yatay taşma yok.
+## Erişim kuralları: 9/9 geçti
 
-## Küçük notlar (engel değil)
-1. `sw.js` önbellek listesinde `icons/icon-maskable-512.png` yok (Nayro).
-2. `favicon.ico` yok; istenirse `<link rel="icon" href="icons/icon-192.png">` eklenebilir (Nayro).
-3. iPhone SE genişliğinde Bugün'deki "Yarın / 19 Ekim / Akşam · 16:00-00:00" satırı iki satıra kırılıyor; okunuyor ama sıkışık.
-4. 2. sürümdeki veriler (`vardiyalar`, `molalar`) yeni anahtarlara (`settings`, `breaks`) taşınmıyor. Kullanıcı eski sürümü kullanmadıysa sorun değil.
-5. Google çeviri ucu benim bilgisayarımın IP'sinden engelli döndü; telefonda büyük ihtimalle çalışır, çalışmazsa yedek devreye giriyor.
+`tests/firestore.test.cjs`:
+- Oda, ilk üyelik ve kişisel oda dizini atomik oluşturuluyor.
+- Üye olmayan ve giriş yapmamış istemciler oda, üye durumu ve mesaj okuyamıyor.
+- Oda ve davet listeleri sorgulanamıyor; tam rastgele davet token'ı gerekir.
+- Geçerli davet olmadan üyelik veya sahte oda dizini oluşturulamıyor.
+- Üye yalnız kendi durumunu değiştirebiliyor; başka üyenin verisi, sahte ad/kimlik ve geçersiz durum reddediliyor.
+- Mesajın üyesi, gönderen kimliği, sunucu zamanı ve uzunluğu denetleniyor.
+- Aynı odadaki kullanıcılar birbirlerinin kişisel vardiya/alarm belgesine erişemiyor.
+- Süresi dolmuş/iptal edilmiş davet reddediliyor; başkası daveti iptal edemiyor.
+- Odadan ayrılınca erişim kesiliyor; başka odaya üye olmak erişim vermiyor.
+
+## İki kullanıcıyla uçtan uca ekip akışı: geçti
+
+`tests/team-ui.cjs`:
+- Ayrı tarayıcı oturumlarında iki e-posta hesabı açma.
+- Serbest adla oda oluşturma, 192 bit davet oluşturma, davetten ikinci kullanıcıyla katılma.
+- İki yönlü gerçek zamanlı sohbet, HTML enjeksiyonunun metin olarak kalması.
+- Kişisel mola başlatıldığında karşı tarafta kalan dakika görünmesi.
+- Geliyorum/döndüm, yeniden yükleme sonrası durumun korunması, kişisel mola kaydı.
+- Çevrimdışı mesajın gönderilmiş gibi gösterilmemesi.
+- Odadan ayrıldıktan sonra ortak durumun silinmesi.
+- Tarayıcı sayfa hatası: 0.
+
+Ekip ekran görüntüleri bu emülatör oturumlarından alındı; üretim kullanıcıları veya sahte tamamlanmış ekranlar değildir.
+
+## Kişisel özellikler ve görsel düzen: geçti
+
+`tests/personal-ui.cjs`:
+- 320, 390, 768 ve 1440 px genişliklerde açık/koyu tema × dört kişisel ekran: 32 kombinasyonda yatay taşma yok.
+- Tema tercihi yeniden yüklemede korunuyor, otomatik tema sistem değişimini izliyor.
+- Takvim ay gezinmesi, tek günlük vardiya değişikliği ve düzene dönüş.
+- Alt sayfanın Escape ile kapanması, arka planın odak dışında kalması.
+- Elle mola ekleme/düzenleme ve kalıcı kayıt.
+- `.ics` dışa aktarımında vardiyalar ve alarm blokları.
+- Mevcut Tetris modunun açılması.
+- Servis çalışanı kurulduktan sonra çevrimdışı yeniden açılma, takvim ve mola ekranları.
+- Tarayıcı sayfa hatası: 0.
+
+`node --check` ve `git diff --check` de uygulandı.
+
+## Tarayıcı yorumları sonrası doğrulama
+
+`tests/feedback-ui.cjs` (`npm run test:feedback`) geçti:
+
+- Altı mola süresi seçeneği, yeniden yüklemede kalıcılık ve aktif molanın korunması.
+- iPhone kestirme adı/tarih girdisi, Android intent paketi ve APK dosyasına erişim.
+- Kurulum onayı olmadan başlatmanın engellenmesi; ileri/geçmiş tarih korumaları.
+- Gerçek giriş formunda Google logosu; sayfa hatası yok.
+- Kişisel arayüzün 32 görünüm kombinasyonu ve işlev testleri yeniden geçti.
+- Android APK derlendi; v2/v3 imzası ve yalnız SET_ALARM izni doğrulandı. Cihazda çalıştırılmadı.
+
+## Sınırlar
+
+- Fiziksel iPhone/Safari, ana ekrana ekleme ve gerçek Google oturumu bu ortamda test edilmedi.
+- Google/e-posta entegrasyonu ve dolu Firebase yapılandırması mevcut koddan doğrulandı. Üretimde sağlayıcı etkinliği, yetkili alan adı ve Firestore kuralları yönetici erişimiyle doğrulanmadı.
+- Yeni `firestore.rules` üretime uygulanmadan ekip akışları canlı sitede kullanıma hazır sayılmaz. Kurulum: `KURULUM-EKIP.md`.
+- Arka planda anlık durum, kapalı PWA'da alarm veya sohbet push bildirimi garantisi yok. Son durum zamanı gösterilir; mevcut takvim alarmı yolu korunur.
+- Mesajların son 60 tanesi görüntülenir. Dosya eki, eski mesaj sayfalaması, oda/mesaj yönetimi bu sürümün kapsamı dışında.
+- Kod ve görseller inceleme için yerelde hazırlandı; GitHub'a push, PR birleştirme veya dağıtım yapılmadı.

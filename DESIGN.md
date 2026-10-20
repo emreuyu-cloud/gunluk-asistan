@@ -1,5 +1,20 @@
 # Günlük Asistan v3: tasarım ve iş bölümü
 
+## Güncel yerel çalışma — 20 Ekim 2026
+
+Kullanıcının tasarım yenilemesi ve ekip odaları talebi doğrultusunda ortak arayüz güncellendi. Eski dosya sahipliği notları önceki geliştirme dönemine aittir.
+
+- Açık, koyu ve cihazı izleyen otomatik görünüm; cihazda saklanan tercih.
+- SF/system tipografi, dengeli kartlar, belirgin birincil butonlar, beş sekmeli alt gezinme.
+- Takvimde erişilebilir gün düğmeleri, aylık dağılım grafiği; yenilenen mola halkası.
+- Alt sayfalarda kapatma düğmesi, Escape ve odak yönetimi; büyütmeye izin veren viewport.
+- Ekip odaları, davetle katılım, gerçek zamanlı sohbet ve mola/dönüş durumu. Ayrıntı: `KURULUM-EKIP.md`.
+- PWA önbelleği v12. Mevcut vardiya/alarm/takvim/yedekleme/Tetris akışları korunuyor.
+- Daha canlı vardiya kartları ve belirgin dekoratif daireler; Google girişinde renkli G logosu.
+- Mola halkasına dokunarak 15/30/45/60/90/120 dakika günlük hak seçimi. Mevcut mola geçmişi ve aktif molanın başlangıcı korunur.
+- Android yardımcı APK ve iPhone Kestirmeler ile telefonun Saat uygulamasına alarm aktarımı. Kurulum ve sınırlar: `TELEFON-ALARM.md`.
+- Kod yerelde doğrulandı; üretim Firebase kuralları ve canlı site değiştirilmedi.
+
 Hedef: iPhone'da ana ekrana eklenen, tam ekran açılan, internetsiz çalışan ve bitmiş bir iOS uygulaması gibi görünen bir PWA. Dil Türkçe.
 
 ## Dosyalar ve sahipleri
