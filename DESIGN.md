@@ -49,4 +49,4 @@ Başkasının dosyasını düzenleme; değişiklik gerekiyorsa NOTES.md'ye yaz.
 - Bugün ekranında Alarm anahtarı. Açıkken sıradaki vardiyanın başlangıcından 2 saat önce çalar (düzen ve saatler uygulamadaki vardiya hesabından gelir; izin gününde alarm yok). Sonraki alarm saati aynı kartta görünür.
 - Uygulama açıkken Bildirim API'si ve kısa bir WebAudio sesi. Kilitliyken çalması için "Takvime ekle" (.ics, VALARM). Ayrıntı ve sınırlar uygulama içinde kısa not olarak durur.
 - Ayarlar'da Hesap. `firebase-config.js` boşken "Hesap özelliği henüz kurulmadı"; uygulama geri kalanı hesapsız çalışır. Kurulum: KURULUM-HESAP.md.
-- Servis çalışanı önbelleği v8. Firebase SDK yalnızca hesap açılınca veya oturum varken, gstatic üzerinden yüklenir.
+- Servis çalışanı önbelleği v9. Firebase SDK yalnızca hesap açılınca veya oturum varken, gstatic üzerinden yüklenir. Veri `users/{uid}/data/state` belgesindedir.
