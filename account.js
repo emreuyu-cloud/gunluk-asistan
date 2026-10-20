@@ -98,10 +98,14 @@
     try { return await ensureFirebase.pending; } finally { ensureFirebase.pending = null; }
   }
 
+  function userRef(uid) {
+    // rules: users/{userId}/{document=**} — alt belge, üst users/{uid} belgesi değil
+    return mods.fs.doc(mods.db, 'users', uid, 'data', 'state');
+  }
   async function syncUser(u) {
     if (syncing) return syncing;
     syncing = (async () => {
-      const ref = mods.fs.doc(mods.db, 'users', u.uid);
+      const ref = userRef(u.uid);
       let remote = null;
       try {
         const snap = await mods.fs.getDoc(ref);
@@ -123,7 +127,7 @@
     const gen = ++pushGen;
     const payload = App.getSyncPayload();
     try {
-      await mods.fs.setDoc(mods.fs.doc(mods.db, 'users', user.uid), payload);
+      await mods.fs.setDoc(userRef(user.uid), payload);
       if (gen === pushGen) statusLine(user, 'eşitlendi');
       else pushNow();
     } catch (e) { if (gen === pushGen) statusLine(user, 'eşitlenemedi'); }
@@ -135,7 +139,7 @@
   async function pull() {
     if (!user || !mods || syncing) return;
     try {
-      const snap = await mods.fs.getDoc(mods.fs.doc(mods.db, 'users', user.uid));
+      const snap = await mods.fs.getDoc(userRef(user.uid));
       if (!snap.exists()) return pushNow();
       const data = snap.data() || {};
       const cur = App.getSyncPayload();
@@ -252,7 +256,7 @@
   }
   async function wipe() {
     try {
-      if (user && mods) await mods.fs.deleteDoc(mods.fs.doc(mods.db, 'users', user.uid));
+      if (user && mods) await mods.fs.deleteDoc(userRef(user.uid));
     } catch (e) {}
     try { if (mods && auth) await mods.authMod.signOut(auth); } catch (e) {}
     remember(null);

@@ -43,14 +43,14 @@ Authentication → **Settings** → **Authorized domains** listesine ekle:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
+    match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
 ```
 
-Veri `users/{uid}` belgesindedir: vardiya saatleri ve düzen, gün değişiklikleri (izin dahil), molalar, süren mola, alarm açık/kapalı ve son çalma zamanı. Tetris skoru eşitlenmez.
+Veri `users/{uid}/data/state` belgesindedir (kurallar `users/{userId}` altındaki belgeleri kapsar): vardiya saatleri ve düzen, gün değişiklikleri (izin dahil), molalar, süren mola, alarm açık/kapalı ve son çalma zamanı. Tetris skoru eşitlenmez.
 
 ## 4. Nasıl eşitlenir
 

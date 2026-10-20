@@ -1,5 +1,5 @@
-const CACHE = 'gunluk-asistan-v8';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'tetris.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
+const CACHE = 'gunluk-asistan-v9';
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'account.js', 'firebase-config.js', 'tetris.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 const TIMEOUT = 3000;
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => Promise.all(FILES.map(f => fetch(f, { cache: 'no-cache' }).then(r => r.ok ? c.put(f, r) : null).catch(() => {})))).then(() => self.skipWaiting()));
